@@ -296,7 +296,15 @@ the filename.
 
 ### PUSH
 
-(see below — appended after the push commit lands.)
+- Commits on `main` (https://github.com/mudassar531/countervision):
+  - `3d8d843` — Phase 1: detect + track (YOLO26 + BoT-SORT on MPS)
+  - `327913e` — extract `IdSwitchCounter` to its own module so CI doesn't
+    need the heavy `[cv]` extras (lint + pytest stayed broken on the
+    first push because the test pulled `detect_track` which top-level
+    imports `supervision`).
+- CI: [run 27582412831](https://github.com/mudassar531/countervision/actions/runs/27582412831)
+  green on `327913e` — ruff clean, 27/27 pytest pass, dry-run step
+  still skips gracefully when no real footage on the runner.
 
 ### NEXT — Phase 2 (do not start yet)
 
