@@ -22,7 +22,7 @@
 |---|-----------------------------------------------------|-------------|-------|
 | 0 | Scaffold + camera discovery + timeparse + CI        | ✅ done     | Pushed to `mudassar531/countervision` (HEAD `ff0897f`). CI green, 20/20 tests pass, dry-run validated on real footage locally. |
 | 1 | Detect + track (YOLO26 MPS + BoT-SORT)              | ✅ done     | Pushed (HEAD `327913e`); CI green. 27/27 tests, 3 cameras × 180 s validated on real footage — 89 unique IDs, 38 ID-switch-proxy events, ID #28 survived a 2.20 s occlusion. |
-| 2 | Zones / footfall / dwell / heatmap / occupancy      | ✅ done     | 43/43 tests; `--run-zones` validated on real artefacts (heatmaps overlay correctly on hot spots; provisional per-track dwell + occupancy timeseries written; `unique_visitors_locked: true` everywhere). |
+| 2 | Zones / footfall / dwell / heatmap / occupancy      | ✅ done     | Pushed (HEAD `6e75615`); CI green. 43/43 tests, real-footage run validated (heatmaps overlay correctly; provisional dwell + occupancy timeseries written; `unique_visitors_locked: true` everywhere). |
 | 3 | Identity: unique + repeat + watchlist               | ⏳ pending  | Awaits go-ahead. |
 | 2 | Zones / footfall / dwell / heatmap / occupancy      | ⏳ pending  | |
 | 3 | Identity: unique + repeat + watchlist               | ⏳ pending  | |
@@ -467,7 +467,12 @@ geometry actually produces, not what looks good.
 
 ### PUSH
 
-(see below — appended after the push lands.)
+- Commit on `main`: `6e75615` — Phase 2: zones / footfall / dwell /
+  heatmap / occupancy
+- Repo: <https://github.com/mudassar531/countervision>
+- CI: [run 27583182562](https://github.com/mudassar531/countervision/actions/runs/27583182562)
+  green on `6e75615` — ruff clean, **43/43** pytest pass on the
+  lightweight default deps (no `[cv]` extras needed).
 
 ### NEXT — Phase 3 (do not start yet)
 
