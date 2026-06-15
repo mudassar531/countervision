@@ -1,58 +1,59 @@
-# CounterVision — pipeline config
-# Phase 0 placeholder mapping. Zones / entry lines are drawn against real
-# footage in Phase 2 with the click-to-draw helper. Update area names then if
-# the footage tells a different retail story.
-
-store_name: "CounterVision Demo Store"
-fps_fallback: 25            # all current footage probes at ~25 fps
-
-# Video files we'll process. By default we discover any `.mp4` per camera
-# (per the build spec); `.mov` is included because camera-5 only ships .mov.
-video_extensions: [".mp4", ".mov"]
-
-# Default processing window per video — keeps demo runs fast and the
-# annotated mp4 demo-length. CLI flags --start-seconds / --duration-seconds
-# / --full override this; --full processes the entire clip.
-processing_window:
-  start_seconds: 0
-  duration_seconds: 180     # 3 minutes is a representative retail segment
-
-# Phase 1 — detection + tracking (YOLO26 + BoT-SORT on MPS).
+store_name: CounterVision Demo Store
+fps_fallback: 25
+video_extensions: [.mp4, .mov]
+processing_window: {start_seconds: 0, duration_seconds: 180}
 detect:
-  model: "yolo26s.pt"       # bump to yolo26m.pt if seated/distant people are missed
-  device: "mps"             # Apple Silicon; never CUDA on this machine
-  imgsz: 960                # 1080p source → 960 keeps recall on small/seated people
-  conf: 0.30                # detection confidence floor
-  iou: 0.55                 # NMS IoU
-  classes: [0]              # COCO id 0 = person — only people for retail analytics
-  tracker_yaml: "countervision/botsort_demo.yaml"
-  # Output formatting on the annotated mp4
-  trace_length: 90          # frames of trail per track (~3.6s at 25fps)
+  model: yolo26s.pt
+  device: mps
+  imgsz: 960
+  conf: 0.3
+  iou: 0.55
+  classes: [0]
+  tracker_yaml: countervision/botsort_demo.yaml
+  trace_length: 90
   box_thickness: 2
   label_text_scale: 0.5
-  # ID-switch heuristic (we have no GT — this is a proxy, see detect_track.py)
-  id_switch_iou: 0.30
+  id_switch_iou: 0.3
   id_switch_lookback_frames: 30
-
 cameras:
   camera-1:
-    area: "Cosmetics & Skincare"
-    zones: []
-    entry_line: null
+    area: Cosmetics & Skincare
+    zones:
+    - name: Main floor
+      color: '#0A1347'
+      polygon:
+      - [384, 216]
+      - [1536, 216]
+      - [1536, 864]
+      - [384, 864]
+    entry_line:
+      start: [288, 810]
+      end: [1632, 810]
   camera-3:
-    area: "Fragrance & Promo Aisle"
-    zones: []
-    entry_line: null
+    area: Customer Seating / Try-on Lounge
+    zones:
+    - name: Main floor
+      color: '#0A1347'
+      polygon:
+      - [384, 216]
+      - [1536, 216]
+      - [1536, 864]
+      - [384, 864]
+    entry_line:
+      start: [288, 810]
+      end: [1632, 810]
   camera-5:
-    area: "Entrance & Billing"
-    zones: []
-    entry_line: null
-
-identity:
-  enabled: true
-  quality_min: 0.55        # det_score gate (Phase 3 tune-on-footage)
-  cosine_match: 0.38       # repeat/watchlist cutoff (tune 0.30–0.45 in Phase 3)
-  sample_every_n_frames: 5
-
-behaviour:
-  loiter_seconds: 90
+    area: Service & Consultation Desk
+    zones:
+    - name: Main floor
+      color: '#0A1347'
+      polygon:
+      - [384, 216]
+      - [1536, 216]
+      - [1536, 864]
+      - [384, 864]
+    entry_line:
+      start: [288, 810]
+      end: [1632, 810]
+identity: {enabled: true, quality_min: 0.55, cosine_match: 0.38, sample_every_n_frames: 5}
+behaviour: {loiter_seconds: 90}

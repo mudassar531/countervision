@@ -33,6 +33,7 @@ data/output/heatmaps/
 data/output/frames/
 data/output/alerts/
 data/output/tracks/
+data/output/zones/
 data/output/logs/
 data/output/cache/
 

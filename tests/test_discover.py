@@ -90,8 +90,8 @@ def test_discover_all_end_to_end(synthetic_videos_root: Path) -> None:
     by_id = {c.config.camera_id: c for c in cameras}
 
     assert by_id["camera-1"].config.area == "Cosmetics & Skincare"
-    assert by_id["camera-3"].config.area == "Fragrance & Promo Aisle"
-    assert by_id["camera-5"].config.area == "Entrance & Billing"
+    assert by_id["camera-3"].config.area == "Customer Seating / Try-on Lounge"
+    assert by_id["camera-5"].config.area == "Service & Consultation Desk"
 
     for cam in cameras:
         assert len(cam.videos) == 1, cam.config.camera_id

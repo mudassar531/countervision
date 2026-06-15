@@ -71,6 +71,27 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Phase 1: run YOLO26 + BoT-SORT per camera over the processing window.",
     )
+    parser.add_argument(
+        "--run-zones",
+        action="store_true",
+        help="Phase 2: read tracks/<cam>.jsonl, write zones/<cam>.json + heatmaps/<cam>.png.",
+    )
+    parser.add_argument(
+        "--draw-zones",
+        metavar="CAMERA_ID",
+        default=None,
+        help="Phase 2: open the interactive cv2 zone editor for one camera (writes config.yaml).",
+    )
+    parser.add_argument(
+        "--draw-zones-default",
+        action="store_true",
+        help="Phase 2: non-interactively populate empty zones / entry_line with sane defaults.",
+    )
+    parser.add_argument(
+        "--overwrite-zones",
+        action="store_true",
+        help="Used with --draw-zones-default: also overwrite zones that are already set.",
+    )
 
     # Processing-window overrides (Phase 1+).
     parser.add_argument(
@@ -272,6 +293,136 @@ def run_detect_track_mode(
     return 0
 
 
+def run_draw_zones_default_mode(
+    config_path: Path,
+    output_root: Path,
+    overwrite: bool,
+) -> int:
+    from tools.draw_zones import populate_defaults  # noqa: I001
+
+    summary = populate_defaults(
+        config_path=config_path,
+        frames_dir=output_root / "frames",
+        overwrite=overwrite,
+    )
+    print("draw-zones-default — wrote config.yaml")
+    for cam_id, info in summary.items():
+        print(f"  [{cam_id}] {info}")
+    return 0
+
+
+def run_draw_zones_interactive_mode(
+    config_path: Path,
+    output_root: Path,
+    camera_id: str,
+) -> int:
+    from tools.draw_zones import interactive_draw  # noqa: I001
+
+    frame_path = output_root / "frames" / f"{camera_id}.jpg"
+    if not frame_path.exists():
+        print(
+            f"ERROR: no frame jpg for {camera_id} at {frame_path}. "
+            "Run --run-detect-track first.",
+            file=sys.stderr,
+        )
+        return 2
+    written = interactive_draw(
+        camera_id=camera_id,
+        frame_path=frame_path,
+        config_path=config_path,
+    )
+    if not written:
+        print(f"[{camera_id}] cancelled (no config changes written)")
+        return 1
+    print(f"[{camera_id}] saved {len(written.get('zones') or [])} zone(s) "
+          f"and {'an' if written.get('entry_line') else 'no'} entry line to {config_path}")
+    return 0
+
+
+def run_zones_mode(
+    config: PipelineConfig,
+    videos_root: Path,
+    output_root: Path,
+) -> int:
+    from countervision.zones import run_zone_analytics, summarize_results
+
+    tracks_dir = output_root / "tracks"
+    frames_dir = output_root / "frames"
+
+    cameras = discover_all(config, videos_root=videos_root)
+    results = []
+    for cam in cameras:
+        cam_id = cam.config.camera_id
+        tracks_path = tracks_dir / f"{cam_id}.jsonl"
+        frame_path = frames_dir / f"{cam_id}.jpg"
+        if not tracks_path.exists() or not frame_path.exists():
+            print(
+                f"[{cam_id}] skipping — missing tracks ({tracks_path.exists()}) "
+                f"or frame ({frame_path.exists()}). Run --run-detect-track first.",
+                file=sys.stderr,
+            )
+            continue
+        # The raw config block is the source of truth for zone polygons /
+        # entry-line coords; the typed CameraConfig only carries area + the
+        # serialized blob.
+        block = config.raw.get("cameras", {}).get(cam_id, {})
+        expected_videos = [v.path.name for v in cam.videos]
+        result = run_zone_analytics(
+            camera_id=cam_id,
+            area=cam.config.area,
+            tracks_jsonl=tracks_path,
+            fps=config.fps_fallback,
+            frame_jpg=frame_path,
+            out_root=output_root,
+            zones_cfg=block.get("zones"),
+            entry_line_cfg=block.get("entry_line"),
+            expected_videos=expected_videos,
+        )
+        results.append(result)
+
+    if not results:
+        print("ERROR: no cameras had tracks + frame artefacts to consume.", file=sys.stderr)
+        return 2
+
+    print(summarize_results(results, PROJECT_ROOT))
+    summary_path = output_root / "phase2_summary.json"
+    summary_path.write_text(
+        json.dumps(
+            {
+                "store_name": config.store_name,
+                "cameras": [
+                    {
+                        "camera_id": r.camera_id,
+                        "area": r.area,
+                        "frames_processed": r.frames_processed,
+                        "person_tracks_count": r.person_tracks_count,
+                        "footfall_in": r.line_crossing.in_count if r.line_crossing else 0,
+                        "footfall_out": r.line_crossing.out_count if r.line_crossing else 0,
+                        "zone_peak_occupancy": {
+                            z.name: z.occupancy_peak for z in r.zones
+                        },
+                        "videos_considered": r.videos_considered,
+                        "videos_skipped": r.videos_skipped,
+                        "json_path": str(r.json_path.relative_to(PROJECT_ROOT)),
+                        "heatmap_path": str(r.heatmap_path.relative_to(PROJECT_ROOT)),
+                    }
+                    for r in results
+                ],
+                "guardrails": {
+                    "unique_visitors_locked": True,
+                    "unique_visitors_note": results[0].note_unique_visitors_locked,
+                    "dwell_provisional_note": results[0].note_provisional_dwell,
+                },
+            },
+            indent=2,
+            default=str,
+        ),
+        encoding="utf-8",
+    )
+    print(f"Wrote Phase 2 summary JSON: {summary_path}", file=sys.stderr)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     log = configure_logging(args.log_level)
@@ -284,10 +435,16 @@ def main(argv: list[str] | None = None) -> int:
         return run_dry_run(config, args.videos_root, args.json_out)
     if args.run_detect_track:
         return run_detect_track_mode(config, args.videos_root, args.output_root, window)
+    if args.draw_zones_default:
+        return run_draw_zones_default_mode(args.config, args.output_root, args.overwrite_zones)
+    if args.draw_zones is not None:
+        return run_draw_zones_interactive_mode(args.config, args.output_root, args.draw_zones)
+    if args.run_zones:
+        return run_zones_mode(config, args.videos_root, args.output_root)
 
     print(
-        "Nothing to do. Use --dry-run (Phase 0) or --run-detect-track "
-        "(Phase 1). Later phases will add zones/identity/aggregate.",
+        "Nothing to do. Modes: --dry-run (Phase 0) / --run-detect-track (Phase 1) / "
+        "--draw-zones-default / --draw-zones CAM / --run-zones (Phase 2).",
         file=sys.stderr,
     )
     return 1

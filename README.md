@@ -32,12 +32,49 @@ uv run python main.py --run-detect-track                            # default 18
 uv run python main.py --run-detect-track --duration-seconds 30      # quick smoke
 uv run python main.py --run-detect-track --start-seconds 60 --full  # everything after 60 s
 
-# 4. Tests + lint
+# 4. Phase 2 — populate zones + entry lines (auto defaults, or interactive).
+#    Then run analytics over the existing tracks JSONL (no model re-run).
+uv run python main.py --draw-zones-default            # central 60% polygon + horizontal line @ 75%
+# Optional: redraw zones interactively on a single camera (cv2 GUI)
+# uv run python main.py --draw-zones camera-1
+uv run python main.py --run-zones                     # writes zones/<cam>.json + heatmaps/<cam>.png
+
+# 5. Tests + lint
 uv run ruff check ..
 uv run pytest ../tests -q
 ```
 
 The dry-run is what CI runs on every push (`.github/workflows/ci.yml`).
+
+## Phase 2 outputs
+
+`uv run python main.py --run-zones` (after `--draw-zones-default` or a
+manual `--draw-zones CAMERA`) writes, per camera:
+
+- `data/output/zones/<camera>.json` — versioned schema:
+  `area`, `footfall.{in_count, out_count, events}`, `footfall_by_hour`,
+  `zones[].{polygon, occupancy_peak, dwell_seconds_by_track_provisional,
+  avg_dwell_seconds_provisional, provisional_note}`,
+  `occupancy_timeseries[]`, `person_tracks.{count, note}`,
+  `videos_considered`, `videos_skipped`,
+  **`unique_visitors_locked: true`** and `unique_visitors_note`.
+- `data/output/heatmaps/<camera>.png` — gaussian-blurred density of box
+  bottom-center points across the window, composited over the
+  Phase-1 first-frame jpg with alpha blending. Empty heat → black
+  PNG (we don't lie with JET's deep-blue default).
+- `data/output/phase2_summary.json` — orchestrator-level roll-up.
+
+**Guardrails enforced in code + JSON:**
+
+- No field is called `unique_visitors`. Tracker IDs are not visitor
+  identities and **Phase 2 will not emit a unique-visitor count.** That
+  comes from Phase 3 face linking.
+- Per-zone dwell uses the `*_provisional` suffix + a
+  `provisional_note` because one person can fragment across multiple
+  tracker IDs during occlusion. Phase 3 face linking replaces these.
+- Multiple videos per camera are explicitly tracked
+  (`videos_considered` / `videos_skipped`) so it is obvious when a
+  continuation file hasn't been processed yet.
 
 ## Phase 1 outputs
 

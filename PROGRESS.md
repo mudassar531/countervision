@@ -21,8 +21,9 @@
 | # | Phase                                              | Status      | Notes |
 |---|-----------------------------------------------------|-------------|-------|
 | 0 | Scaffold + camera discovery + timeparse + CI        | ✅ done     | Pushed to `mudassar531/countervision` (HEAD `ff0897f`). CI green, 20/20 tests pass, dry-run validated on real footage locally. |
-| 1 | Detect + track (YOLO26 MPS + BoT-SORT)              | ✅ done     | 27/27 tests; 3 cameras × 180 s validated on real footage (89 IDs, 38 ID-switch-proxy events, ID #28 survived a 2.20 s occlusion). |
-| 2 | Zones / footfall / dwell / heatmap / occupancy      | ⏳ pending  | Awaits go-ahead. |
+| 1 | Detect + track (YOLO26 MPS + BoT-SORT)              | ✅ done     | Pushed (HEAD `327913e`); CI green. 27/27 tests, 3 cameras × 180 s validated on real footage — 89 unique IDs, 38 ID-switch-proxy events, ID #28 survived a 2.20 s occlusion. |
+| 2 | Zones / footfall / dwell / heatmap / occupancy      | ✅ done     | 43/43 tests; `--run-zones` validated on real artefacts (heatmaps overlay correctly on hot spots; provisional per-track dwell + occupancy timeseries written; `unique_visitors_locked: true` everywhere). |
+| 3 | Identity: unique + repeat + watchlist               | ⏳ pending  | Awaits go-ahead. |
 | 2 | Zones / footfall / dwell / heatmap / occupancy      | ⏳ pending  | |
 | 3 | Identity: unique + repeat + watchlist               | ⏳ pending  | |
 | 4 | Cross-camera journey                                | ⏳ pending  | |
@@ -315,3 +316,166 @@ rather than re-running detection.** Confirm the retail area mapping
 against what the footage actually shows; redraw the placeholder
 camera-1 / camera-3 / camera-5 area labels if the scenes tell a
 different story.
+
+---
+
+## Phase 2 — Zones / footfall / dwell / heatmap / occupancy
+
+### THINK (goal, files, risks)
+
+**Goal.** Consume the Phase 1 tracks JSONL (no model re-run) and turn it
+into per-camera footfall (line crossings), per-zone presence + provisional
+dwell, occupancy timeseries, and a heatmap PNG composited over the clean
+first-frame jpg. Acceptance: footfall matches an eyeball count on a clip;
+dwell + heatmap + occupancy produced per camera; **no field labelled
+"unique visitors"** anywhere in the output (that comes from face identity
+in Phase 3).
+
+**Context7 lookups (done first).**
+
+* `sv.LineZone(start=Point, end=Point, triggering_anchors=[Position.BOTTOM_CENTER])`
+  → `trigger(detections)` returns `(crossed_in, crossed_out)` and bumps
+  `in_count` / `out_count`. Tracker-IDs required.
+* `sv.PolygonZone(polygon=np.ndarray, triggering_anchors=…)` →
+  `trigger(detections)` returns a boolean mask.
+* `sv.HeatMapAnnotator(radius, opacity, …)` exists, but we don't pass
+  full Detections frames at scale here — heat is accumulated from box
+  bottom-center points (NumPy + cv2.GaussianBlur).
+* The `triggering_position` arg is deprecated for `triggering_anchors`.
+
+**Decision: implement the primitives in pure NumPy + OpenCV** rather than
+hard-depending on supervision in `zones.py`. Reasons:
+
+1. Keeps the unit tests CI-friendly — no `[cv]` extras required.
+2. Avoids supervision's `frame_resolution_wh`-required quirks across
+   versions.
+3. We want explicit control over the "what counts as `in`" convention
+   so it's deterministic and documented (see `LineCrossing` docstring).
+
+**Area labels — confirmed against the actual scenes** (viewed each
+`frames/<cam>.jpg`):
+
+| camera   | burned-in label    | scene reality                                              | retail label |
+|----------|---------------------|-------------------------------------------------------------|--------------|
+| camera-1 | "Operators Hall"    | Open floor, tall wall of cubed wooden display shelving left | **kept** "Cosmetics & Skincare" — the cube shelving sells believably as merchandise displays |
+| camera-3 | "Grab Stations"     | Bright window seating, 2 people seated around a small surface | **relabelled** "Customer Seating / Try-on Lounge" — was "Fragrance & Promo Aisle" (no aisle in frame) |
+| camera-5 | "Barkerend / Kingz" | Cluster of workstations, seated operators, deskphones, multiple monitors | **relabelled** "Service & Consultation Desk" — was "Entrance & Billing" (no till or door in frame) |
+
+**camera-3 two-file handling — decision documented.** Phase 1's
+orchestrator currently picks `cam.videos[0]`, so only
+`20260608003129784.mp4` is tracked; the continuation
+`20260608005449323.mp4` is **not** in `tracks/camera-3.jsonl`. Phase 2
+reads what is present and emits both `videos_considered` and
+`videos_skipped` per camera, plus the human-readable summary prints
+"videos NOT tracked: …". Extending Phase 1 to iterate every video per
+camera (and concatenate their tracks with the right wall-clock offsets)
+is a small change but **out of scope for this phase** — leaving it for
+when we revisit Phase 1 between phases.
+
+**Files created / changed.**
+
+* `pipeline/countervision/zones.py` — pure NumPy + OpenCV
+  primitives: `LineCrossing` (signed cross-product, anchor =
+  bottom-center, documented in/out convention), `PolygonZone`
+  (cv2.pointPolygonTest, per-track dwell accumulator, peak occupancy),
+  `HeatmapAccumulator` (gaussian-blurred density, composited PNG over
+  base frame), `load_tracks_jsonl`, `run_zone_analytics`,
+  `summarize_results`.
+* `pipeline/tools/draw_zones.py` — operator-facing helper.
+  `populate_defaults` (no GUI; central-60 % polygon, horizontal line at
+  75 % height per camera; idempotent — keeps non-empty existing zones).
+  `interactive_draw` (cv2 GUI: left-click vertices, `c` closes,
+  `n` new polygon, `l` toggles entry-line mode, `s` saves, `q` quits).
+* `pipeline/tools/__init__.py` — package marker.
+* `pipeline/config.yaml` — area labels updated to honest retail
+  framings; zones / entry lines populated via `--draw-zones-default`.
+* `pipeline/main.py` — three new modes: `--run-zones`,
+  `--draw-zones-default [--overwrite-zones]`,
+  `--draw-zones CAMERA_ID`. Writes `data/output/phase2_summary.json`.
+* `tests/test_zones.py` — 14 tests (geometry, line crossings,
+  polygon presence, dwell, heatmap edge cases, default-zone
+  generator, full end-to-end on a synthetic JSONL).
+* `tests/test_discover.py` — updated area assertions to match the
+  relabelled cameras.
+* `.gitignore` — adds `data/output/zones/`.
+
+**Risks / decisions taken.**
+
+* **Guardrail.** No field labelled "unique visitors" anywhere. Every
+  zones JSON includes `unique_visitors_locked: true` plus a
+  `unique_visitors_note` directing readers to Phase 3 face linking.
+  The count we *do* expose is `person_tracks.count` (unique
+  tracker_ids) with an explicit "NOT 'unique visitors'" note.
+* **Provisional dwell.** Per-track dwell aggregations live under
+  `dwell_seconds_by_track_provisional` /
+  `avg_dwell_seconds_provisional`, each with a
+  `provisional_note` saying authoritative per-person dwell will come
+  from Phase 3 face linking.
+* **PyYAML strips comments** on round-trip in
+  `populate_defaults`. The reasoning behind the retail relabels lives
+  in this file, not in `config.yaml`. Switching to ruamel.yaml is a
+  future option but out of scope here.
+* **Default entry line at 75 % height** — these office scenes have
+  people sitting in the upper half of frame, so the default line
+  often sees zero or one crossing. The operator should redraw the
+  line at the scene's real entrance with `--draw-zones CAM`; the
+  current counts are real (not fabricated) but small.
+
+### CODE
+
+Implemented exactly the files above. 43/43 tests pass; ruff clean.
+
+### VALIDATE (on real footage)
+
+```bash
+cd pipeline
+uv run python main.py --draw-zones-default   # one-time, writes config.yaml
+uv run python main.py --run-zones            # reads tracks/<cam>.jsonl
+```
+
+Per-camera headline numbers (from
+`data/output/phase2_summary.json` + `data/output/zones/<cam>.json`):
+
+| camera   | area                                | frames consumed | person tracks | footfall in / out | peak occupancy (Main floor) | videos skipped |
+|----------|--------------------------------------|----------------:|---------------:|-------------------:|----------------------------:|----------------|
+| camera-1 | Cosmetics & Skincare                 | 3 197 | 40 | 0 / 0 | 3 | — |
+| camera-3 | Customer Seating / Try-on Lounge     | 4 500 | 11 | 0 / 1 | 3 | `20260608005449323.mp4` |
+| camera-5 | Service & Consultation Desk          | 4 500 | 38 | 1 / 1 | 2 | — |
+
+(`person_tracks` is unique tracker_ids, NOT unique visitors —
+`unique_visitors_locked: true` in every JSON. `frames_consumed < 4 500`
+on camera-1 because frames with no detections are not written to JSONL
+by Phase 1.)
+
+**Heatmaps visually validated** by inspecting
+`data/output/heatmaps/<cam>.png`:
+
+* `camera-1` — bright red hot spots exactly on the two seated
+  operators on the right of frame, no false heat elsewhere.
+* `camera-3` — hot spots on the two seated guys by the window,
+  matching where the detections actually concentrate.
+* `camera-5` — hot spots on the seated workstation cluster.
+
+Composited over the clean Phase-1 frame; dashboard-ready for Phase 6.
+
+**Footfall counts are honest, not fabricated.** The default entry
+line at y=810 sits below the action in these office scenes, so most
+people stay on one side. An operator running `--draw-zones CAM` and
+redrawing the line where people actually walk will get a more useful
+footfall number — but Phase 2's contract is to report what the
+geometry actually produces, not what looks good.
+
+### PUSH
+
+(see below — appended after the push lands.)
+
+### NEXT — Phase 3 (do not start yet)
+
+InsightFace `buffalo_l` (SCRFD + ArcFace 512-d). Quality-gate by
+`det_score`, embed only quality-gated faces, cluster across the window to
+build a session gallery, and compare against `./watchlist/` for hits.
+Emit alerts as non-accusatory review prompts. Tune `quality_min` +
+`cosine_match` on the real footage, record the chosen values here.
+Crucially: **replace Phase 2's `person_tracks.count` with an authoritative
+`unique_visitors` count** (the field currently flagged
+`unique_visitors_locked: true`).
