@@ -11,7 +11,7 @@ _PIPELINE_DIR = Path(__file__).resolve().parents[1] / "pipeline"
 if str(_PIPELINE_DIR) not in sys.path:
     sys.path.insert(0, str(_PIPELINE_DIR))
 
-from countervision.detect_track import IdSwitchCounter, _iou_xyxy  # noqa: E402
+from countervision.id_switch import IdSwitchCounter, iou_xyxy  # noqa: E402
 
 
 def _box(x: float, y: float, w: float = 40, h: float = 80) -> np.ndarray:
@@ -19,11 +19,11 @@ def _box(x: float, y: float, w: float = 40, h: float = 80) -> np.ndarray:
 
 
 def test_iou_disjoint_is_zero() -> None:
-    assert _iou_xyxy(_box(0, 0), _box(500, 500)) == 0.0
+    assert iou_xyxy(_box(0, 0), _box(500, 500)) == 0.0
 
 
 def test_iou_identical_is_one() -> None:
-    assert _iou_xyxy(_box(10, 10), _box(10, 10)) == 1.0
+    assert iou_xyxy(_box(10, 10), _box(10, 10)) == 1.0
 
 
 def test_no_switch_when_id_persists() -> None:
