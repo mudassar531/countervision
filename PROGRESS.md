@@ -20,7 +20,7 @@
 
 | # | Phase                                              | Status      | Notes |
 |---|-----------------------------------------------------|-------------|-------|
-| 0 | Scaffold + camera discovery + timeparse + CI        | ✅ done     | Dry-run validated on real footage. |
+| 0 | Scaffold + camera discovery + timeparse + CI        | ✅ done     | Pushed to `mudassar531/countervision` (HEAD `ff0897f`). CI green, 20/20 tests pass, dry-run validated on real footage locally. |
 | 1 | Detect + track (YOLO26 MPS + BoT-SORT)              | ⏳ pending  | Awaits go-ahead. |
 | 2 | Zones / footfall / dwell / heatmap / occupancy      | ⏳ pending  | |
 | 3 | Identity: unique + repeat + watchlist               | ⏳ pending  | |
@@ -146,8 +146,14 @@ without error`) — **met.**
 ### PUSH
 
 - Repo: <https://github.com/mudassar531/countervision> (public, owner `mudassar531`).
-- Commit: `0d8487d Phase 0: scaffold + camera discovery + timeparse + CI`
-  on `main`.
+- Commits on `main`:
+  - `0d8487d` — Phase 0 scaffold + camera discovery + timeparse + CI
+  - `dddd046` — PROGRESS.md push details
+  - `ff0897f` — pin pipeline deps with `uv.lock` (unblocks `setup-uv` cache)
+- CI: [run 27580618475](https://github.com/mudassar531/countervision/actions/runs/27580618475)
+  green on `ff0897f` — ruff clean, 20/20 pytest pass, dry-run step
+  gracefully skips on the hosted runner (no real footage there; the
+  synthetic-video tests cover the same path).
 - Created via `gh repo create mudassar531/countervision --public
   --source=. --remote=origin --push` (with `GH_TOKEN` unset so the
   keyring-stored `mudassar531` credentials are used; the env `GH_TOKEN`
