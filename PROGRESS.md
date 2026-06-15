@@ -145,9 +145,17 @@ without error`) — **met.**
 
 ### PUSH
 
-- Repo created on `mudassar531` and pushed to `main` (`gh repo create
-  mudassar531/countervision --public --source=. --remote=origin --push`).
-- See the section below for the commit + URL after the push completes.
+- Repo: <https://github.com/mudassar531/countervision> (public, owner `mudassar531`).
+- Commit: `0d8487d Phase 0: scaffold + camera discovery + timeparse + CI`
+  on `main`.
+- Created via `gh repo create mudassar531/countervision --public
+  --source=. --remote=origin --push` (with `GH_TOKEN` unset so the
+  keyring-stored `mudassar531` credentials are used; the env `GH_TOKEN`
+  belongs to a different account and must never be active for this repo).
+- Videos themselves (>100 MB each, GitHub hard limit) are gitignored.
+  Camera folders are kept via per-folder `README.md` so a fresh clone
+  still discovers them; CI's discover/probe path is covered by the
+  synthetic-mp4 integration tests in `tests/test_discover.py`.
 
 ### NEXT — Phase 1 (do not start yet)
 
