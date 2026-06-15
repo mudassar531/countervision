@@ -26,12 +26,14 @@ if str(_PIPELINE_DIR) not in sys.path:
 from countervision.discover import (  # noqa: E402
     CameraVideos,
     PipelineConfig,
+    ProcessingWindow,
     discover_all,
     load_config,
 )
 from countervision.logging_setup import configure_logging  # noqa: E402
 
 PROJECT_ROOT = _PIPELINE_DIR.parent
+DEFAULT_OUTPUT_ROOT = PROJECT_ROOT / "data" / "output"
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -52,10 +54,43 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Root directory containing one sub-folder per camera (default: ./videos).",
     )
     parser.add_argument(
+        "--output-root",
+        type=Path,
+        default=DEFAULT_OUTPUT_ROOT,
+        help="Where to write pipeline artifacts (default: data/output).",
+    )
+
+    # Mode flags — mutually independent but at most one runs per invocation.
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Discover cameras + probe videos + print a summary. No model inference.",
     )
+    parser.add_argument(
+        "--run-detect-track",
+        action="store_true",
+        help="Phase 1: run YOLO26 + BoT-SORT per camera over the processing window.",
+    )
+
+    # Processing-window overrides (Phase 1+).
+    parser.add_argument(
+        "--start-seconds",
+        type=float,
+        default=None,
+        help="Override processing_window.start_seconds.",
+    )
+    parser.add_argument(
+        "--duration-seconds",
+        type=float,
+        default=None,
+        help="Override processing_window.duration_seconds.",
+    )
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help="Process each clip end-to-end (overrides --duration-seconds).",
+    )
+
     parser.add_argument(
         "--json-out",
         type=Path,
@@ -157,19 +192,102 @@ def run_dry_run(config: PipelineConfig, videos_root: Path, json_out: Path | None
     return 0
 
 
+def _effective_window(args: argparse.Namespace, base: ProcessingWindow) -> ProcessingWindow:
+    """Apply CLI overrides on top of the config-default processing window."""
+    start = args.start_seconds if args.start_seconds is not None else base.start_seconds
+    if args.full:
+        duration = None
+    elif args.duration_seconds is not None:
+        duration = args.duration_seconds
+    else:
+        duration = base.duration_seconds
+    return ProcessingWindow(start_seconds=float(start), duration_seconds=duration)
+
+
+def run_detect_track_mode(
+    config: PipelineConfig,
+    videos_root: Path,
+    output_root: Path,
+    window: ProcessingWindow,
+) -> int:
+    from countervision.detect_track import run_detect_track, summarize_results
+
+    cameras = discover_all(config, videos_root=videos_root)
+    cameras_with_video = [c for c in cameras if c.videos]
+    if not cameras_with_video:
+        print(
+            "ERROR: no videos found under videos/ — Phase 1 needs real footage.",
+            file=sys.stderr,
+        )
+        return 2
+
+    results = run_detect_track(
+        config=config,
+        cameras=cameras_with_video,
+        window=window,
+        out_root=output_root,
+    )
+    summary_txt = summarize_results(results)
+    print(summary_txt)
+
+    summary_json_path = output_root / "phase1_summary.json"
+    summary_json_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_json_path.write_text(
+        json.dumps(
+            {
+                "store_name": config.store_name,
+                "window": {
+                    "start_seconds": window.start_seconds,
+                    "duration_seconds": window.duration_seconds,
+                },
+                "cameras": [
+                    {
+                        "camera_id": r.camera_id,
+                        "area": r.area,
+                        "video": str(r.video_path.name),
+                        "start_frame": r.start_frame,
+                        "end_frame": r.end_frame,
+                        "frames_processed": r.frames_processed,
+                        "detections_total": r.detections_total,
+                        "unique_track_ids": r.unique_track_ids,
+                        "id_switch_count": r.id_switch_count,
+                        "id_switches": r.id_switches[:50],
+                        "fps_processing": round(r.fps_processing, 2),
+                        "elapsed_seconds": round(r.elapsed_seconds, 2),
+                        "annotated_path": str(r.annotated_path.relative_to(PROJECT_ROOT)),
+                        "frame_jpg_path": str(r.frame_jpg_path.relative_to(PROJECT_ROOT)),
+                        "tracks_jsonl_path": str(
+                            r.tracks_jsonl_path.relative_to(PROJECT_ROOT)
+                        ),
+                    }
+                    for r in results
+                ],
+            },
+            indent=2,
+            default=str,
+        ),
+        encoding="utf-8",
+    )
+    print(f"Wrote summary JSON: {summary_json_path}", file=sys.stderr)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     log = configure_logging(args.log_level)
     log.debug("args=%s", args)
 
     config = load_config(args.config)
+    window = _effective_window(args, config.processing_window)
 
     if args.dry_run:
         return run_dry_run(config, args.videos_root, args.json_out)
+    if args.run_detect_track:
+        return run_detect_track_mode(config, args.videos_root, args.output_root, window)
 
     print(
-        "Nothing to do. Phase 0 only supports --dry-run; later phases will add "
-        "detect/track/identity/aggregate.",
+        "Nothing to do. Use --dry-run (Phase 0) or --run-detect-track "
+        "(Phase 1). Later phases will add zones/identity/aggregate.",
         file=sys.stderr,
     )
     return 1

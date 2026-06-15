@@ -22,12 +22,44 @@ uv pip install -e ".[dev]"
 #    probe fps + frame size. No model inference.
 uv run python main.py --dry-run
 
-# 3. Tests + lint
-uv run ruff check .
+# 3. Phase 1 — run YOLO26 + BoT-SORT on MPS. Install heavy CV deps first.
+#    The first run downloads yolo26s.pt (~20 MB). Default window is 180 s
+#    per camera; override with --start-seconds / --duration-seconds, or
+#    --full for the whole clip.
+uv pip install -e ".[cv]"
+export PYTORCH_ENABLE_MPS_FALLBACK=1
+uv run python main.py --run-detect-track                            # default 180 s window
+uv run python main.py --run-detect-track --duration-seconds 30      # quick smoke
+uv run python main.py --run-detect-track --start-seconds 60 --full  # everything after 60 s
+
+# 4. Tests + lint
+uv run ruff check ..
 uv run pytest ../tests -q
 ```
 
 The dry-run is what CI runs on every push (`.github/workflows/ci.yml`).
+
+## Phase 1 outputs
+
+`uv run python main.py --run-detect-track` writes, per camera:
+
+- `data/output/annotated/<camera>.mp4` — 1080p, 25 fps, boxes + IDs +
+  short traces colored by `tracker_id` so visual ID stability is
+  obvious. Each frame also carries a navy HUD with the camera label,
+  area, real wall-clock time and live person count.
+- `data/output/frames/<camera>.jpg` — the clean first decoded frame of
+  the processing window (used as the heatmap backdrop in Phase 2).
+- `data/output/tracks/<camera>.jsonl` — one record per detection
+  (`camera_id`, `frame_idx`, `wall_clock`, `tracker_id`, `xyxy`,
+  `conf`). Phase 2+ consume this so they never re-run the model.
+- `data/output/phase1_summary.json` — orchestrator summary: per-camera
+  unique IDs, ID-switch proxy count, fps and elapsed time.
+
+**ID-switch metric is a proxy**, not MOTA. We have no ground truth, so
+"ID switch" here means: a brand-new `tracker_id` whose bounding box
+overlaps (IoU ≥ `detect.id_switch_iou`) a recently-disappeared
+`tracker_id` within `detect.id_switch_lookback_frames`. Useful as a
+churn metric; not directly comparable to published numbers.
 
 ## Repo layout
 
@@ -40,15 +72,21 @@ COUNTERVISION/
 │   └── workflows/ci.yml
 ├── pipeline/                   # Python (uv-managed)
 │   ├── pyproject.toml
-│   ├── config.yaml             # cameras → area, zones, lines, thresholds
-│   ├── main.py                 # entrypoint (--dry-run today)
+│   ├── config.yaml             # cameras, zones, processing window, detect/identity thresholds
 │   └── countervision/
 │       ├── __init__.py
-│       ├── discover.py         # camera + video discovery, probing
+│       ├── botsort_demo.yaml   # BoT-SORT overrides (track_buffer, new_track_thresh)
+│       ├── detect_track.py     # Phase 1: YOLO26 + BoT-SORT + IdSwitchCounter
+│       ├── discover.py         # camera + video discovery, probing, processing_window
 │       ├── logging_setup.py
+│       ├── main.py             # entrypoint (--dry-run, --run-detect-track)
 │       └── timeparse.py        # YYYYMMDDHHMMSSmmm → datetime
 ├── tests/                      # pytest
 ├── data/output/                # pipeline artifacts (gitignored)
+│   ├── annotated/<cam>.mp4
+│   ├── frames/<cam>.jpg
+│   ├── tracks/<cam>.jsonl
+│   └── phase1_summary.json
 ├── videos/                     # input footage (one folder per camera)
 └── watchlist/                  # reference face JPGs (gitignored)
 ```

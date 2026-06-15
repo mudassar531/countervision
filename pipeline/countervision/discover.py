@@ -53,6 +53,25 @@ class CameraVideos:
 
 
 @dataclass(frozen=True)
+class ProcessingWindow:
+    """Time-window slice of a clip to process (in seconds)."""
+
+    start_seconds: float
+    duration_seconds: float | None  # None == process to end of clip
+
+    def to_frame_range(self, fps: float, total_frames: int) -> tuple[int, int]:
+        """Resolve to ``[start_frame, end_frame_exclusive]`` clipped to clip length."""
+        if fps <= 0:
+            raise ValueError(f"fps must be positive, got {fps!r}")
+        start = max(0, int(round(self.start_seconds * fps)))
+        if self.duration_seconds is None:
+            end = total_frames
+        else:
+            end = start + int(round(self.duration_seconds * fps))
+        return start, min(end, total_frames)
+
+
+@dataclass(frozen=True)
 class PipelineConfig:
     store_name: str
     fps_fallback: float
@@ -60,6 +79,8 @@ class PipelineConfig:
     cameras: dict[str, CameraConfig]
     identity: dict[str, Any]
     behaviour: dict[str, Any]
+    processing_window: ProcessingWindow
+    detect: dict[str, Any]
     raw: dict[str, Any]
 
 
@@ -83,6 +104,16 @@ def load_config(path: str | Path | None = None) -> PipelineConfig:
     ext_raw = raw.get("video_extensions") or list(DEFAULT_VIDEO_EXTENSIONS)
     extensions = tuple(e.lower() if e.startswith(".") else f".{e.lower()}" for e in ext_raw)
 
+    pw_raw = raw.get("processing_window") or {}
+    window = ProcessingWindow(
+        start_seconds=float(pw_raw.get("start_seconds", 0.0)),
+        duration_seconds=(
+            None
+            if pw_raw.get("duration_seconds") in (None, "full", -1)
+            else float(pw_raw.get("duration_seconds", 180.0))
+        ),
+    )
+
     return PipelineConfig(
         store_name=str(raw.get("store_name", "CounterVision Demo Store")),
         fps_fallback=float(raw.get("fps_fallback", 25)),
@@ -90,6 +121,8 @@ def load_config(path: str | Path | None = None) -> PipelineConfig:
         cameras=cameras,
         identity=dict(raw.get("identity") or {}),
         behaviour=dict(raw.get("behaviour") or {}),
+        processing_window=window,
+        detect=dict(raw.get("detect") or {}),
         raw=raw,
     )
 

@@ -10,6 +10,30 @@ fps_fallback: 25            # all current footage probes at ~25 fps
 # (per the build spec); `.mov` is included because camera-5 only ships .mov.
 video_extensions: [".mp4", ".mov"]
 
+# Default processing window per video — keeps demo runs fast and the
+# annotated mp4 demo-length. CLI flags --start-seconds / --duration-seconds
+# / --full override this; --full processes the entire clip.
+processing_window:
+  start_seconds: 0
+  duration_seconds: 180     # 3 minutes is a representative retail segment
+
+# Phase 1 — detection + tracking (YOLO26 + BoT-SORT on MPS).
+detect:
+  model: "yolo26s.pt"       # bump to yolo26m.pt if seated/distant people are missed
+  device: "mps"             # Apple Silicon; never CUDA on this machine
+  imgsz: 960                # 1080p source → 960 keeps recall on small/seated people
+  conf: 0.30                # detection confidence floor
+  iou: 0.55                 # NMS IoU
+  classes: [0]              # COCO id 0 = person — only people for retail analytics
+  tracker_yaml: "countervision/botsort_demo.yaml"
+  # Output formatting on the annotated mp4
+  trace_length: 90          # frames of trail per track (~3.6s at 25fps)
+  box_thickness: 2
+  label_text_scale: 0.5
+  # ID-switch heuristic (we have no GT — this is a proxy, see detect_track.py)
+  id_switch_iou: 0.30
+  id_switch_lookback_frames: 30
+
 cameras:
   camera-1:
     area: "Cosmetics & Skincare"

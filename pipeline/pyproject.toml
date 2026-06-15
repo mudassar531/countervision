@@ -7,9 +7,11 @@ requires-python = ">=3.11,<3.12"
 authors = [{ name = "Agents Limited" }]
 license = { text = "Proprietary" }
 
-# Phase 0 deps only. Heavy CV/ML deps (torch, ultralytics, supervision,
-# insightface, onnxruntime-silicon) are added in later phases so the dry-run
-# (and the CI smoke test) stay lightweight.
+# Phase 0 deps + Phase 1 (detect + track).
+# Heavier deps (insightface, onnxruntime-silicon) still deferred to Phase 3.
+# Lightweight deps needed for Phase 0 (--dry-run), the IdSwitchCounter
+# tests, and the synthetic-video discovery tests. CI installs only these
+# so it stays fast.
 dependencies = [
     "pyyaml>=6.0.1",
     "opencv-python-headless>=4.10.0",
@@ -17,6 +19,19 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Heavy CV/ML deps for Phase 1 (detect + track). Install with:
+#   uv pip install -e ".[cv]"
+# These are intentionally NOT in the default dependency set so CI doesn't
+# need to pull torch / ultralytics on every push.
+cv = [
+    "torch>=2.4",          # MPS-capable on Apple Silicon
+    "torchvision>=0.19",
+    "ultralytics>=8.3",    # YOLO26 family + built-in BoT-SORT
+    "supervision>=0.25",   # Detections / annotators / VideoSink
+    "lap>=0.5.12",         # linear-assignment for BoT-SORT
+]
+# Heavier deps still deferred to Phase 3 (identity):
+#   insightface, onnxruntime-silicon
 dev = [
     "pytest>=8.2",
     "ruff>=0.5",
