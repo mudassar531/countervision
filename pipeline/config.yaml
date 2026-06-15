@@ -1,0 +1,34 @@
+# CounterVision — pipeline config
+# Phase 0 placeholder mapping. Zones / entry lines are drawn against real
+# footage in Phase 2 with the click-to-draw helper. Update area names then if
+# the footage tells a different retail story.
+
+store_name: "CounterVision Demo Store"
+fps_fallback: 25            # all current footage probes at ~25 fps
+
+# Video files we'll process. By default we discover any `.mp4` per camera
+# (per the build spec); `.mov` is included because camera-5 only ships .mov.
+video_extensions: [".mp4", ".mov"]
+
+cameras:
+  camera-1:
+    area: "Cosmetics & Skincare"
+    zones: []
+    entry_line: null
+  camera-3:
+    area: "Fragrance & Promo Aisle"
+    zones: []
+    entry_line: null
+  camera-5:
+    area: "Entrance & Billing"
+    zones: []
+    entry_line: null
+
+identity:
+  enabled: true
+  quality_min: 0.55        # det_score gate (Phase 3 tune-on-footage)
+  cosine_match: 0.38       # repeat/watchlist cutoff (tune 0.30–0.45 in Phase 3)
+  sample_every_n_frames: 5
+
+behaviour:
+  loiter_seconds: 90

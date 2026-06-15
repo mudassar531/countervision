@@ -1,0 +1,59 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+pipeline/.venv/
+
+# uv
+# (keep uv.lock committed)
+
+# Node / Next.js
+node_modules/
+dashboard/.next/
+dashboard/out/
+dashboard/.turbo/
+dashboard/public/data/
+dashboard/public/annotated/
+dashboard/public/heatmaps/
+dashboard/public/frames/
+dashboard/public/alerts/
+
+# Pipeline generated artifacts
+data/output/*.json
+data/output/analytics.db
+data/output/annotated/
+data/output/heatmaps/
+data/output/frames/
+data/output/alerts/
+data/output/logs/
+data/output/cache/
+
+# Model weights downloaded at runtime
+*.pt
+*.onnx
+*.mlpackage
+*.mlmodel
+yolo*.pt
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Input footage — exceeds GitHub's 100MB per-file limit and is not part of
+# the source. Cameras / folders themselves are tracked via .gitkeep so the
+# discovery code finds them after a fresh clone; drop your own .mp4/.mov
+# files in to use the pipeline locally.
+videos/**/*.mp4
+videos/**/*.mov
+videos/**/*.MP4
+videos/**/*.MOV
+videos/**/*.avi
+videos/**/*.mkv

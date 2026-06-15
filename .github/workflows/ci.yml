@@ -1,0 +1,55 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Phase 0 smoke test: lint + unit tests + pipeline dry-run on the real footage.
+# We don't run model inference here — Phase 0 deps only.
+
+jobs:
+  smoke:
+    name: lint + dry-run
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Install pipeline deps (Phase 0 only)
+        working-directory: pipeline
+        run: |
+          uv venv --python 3.11
+          uv pip install -e ".[dev]"
+
+      - name: Ruff lint
+        working-directory: pipeline
+        run: uv run ruff check ..
+
+      - name: Pytest (unit + synthetic-video integration tests)
+        working-directory: pipeline
+        run: uv run pytest ../tests -q
+
+      - name: Pipeline dry-run on real footage (skipped if videos/ empty)
+        working-directory: pipeline
+        run: |
+          if find ../videos -type f \( -iname '*.mp4' -o -iname '*.mov' \) | grep -q .; then
+            uv run python main.py --dry-run --json-out ../data/output/dry_run.json
+            echo "--- dry_run.json ---"
+            cat ../data/output/dry_run.json
+          else
+            echo "No real footage in videos/ (expected on CI). Synthetic-video"
+            echo "integration tests in tests/test_discover.py cover the same"
+            echo "discover + probe + timeparse path."
+          fi
