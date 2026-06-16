@@ -1234,7 +1234,11 @@ couple of MB.
 
 ### PUSH
 
-(see below — appended after the push lands.)
+- Commit on `main`: `af712ab` — Phase 7: one-command demo +
+  DEMO_SCRIPT.md + client-handover README
+- Repo: <https://github.com/mudassar531/countervision>
+- CI: [run 27628862959](https://github.com/mudassar531/countervision/actions/runs/27628862959)
+  green on `af712ab` — ruff clean, **89/89** pytest pass.
 
 ### Project status
 
