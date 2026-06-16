@@ -7,9 +7,78 @@ Apple Silicon MPS) and renders a navy-themed Next.js dashboard.
 
 > **Build status:** see [`PROGRESS.md`](./PROGRESS.md) for the current phase.
 > The full build spec is [`COPILOT_BUILD_PROMPT.md`](./COPILOT_BUILD_PROMPT.md);
-> the agent operating rules are in [`.github/copilot-instructions.md`](./.github/copilot-instructions.md).
+> the agent operating rules are in [`.github/copilot-instructions.md`](./.github/copilot-instructions.md);
+> the 3-minute walkthrough is [`docs/DEMO_SCRIPT.md`](./docs/DEMO_SCRIPT.md);
+> the dashboard contract is [`docs/schema.md`](./docs/schema.md).
 
-## Quick start (Phase 0 only — dry-run)
+## TL;DR — run the demo
+
+```bash
+make install          # one-time: uv venv + Python deps + npm install
+make demo             # full pipeline (~25 min) then serves static dashboard
+                      # → http://localhost:3000
+make demo-quick       # ~10 s — re-aggregate against existing outputs + serve
+make help             # list every target
+```
+
+`make demo` runs the full pipeline over `./videos/` then static-exports
+the dashboard and serves it via `python3 -m http.server`. **Zero live
+inference** in the demo path — the dashboard reads only the
+pre-rendered `analytics.json` and the static heatmaps / annotated
+mp4s. Nothing in the room depends on a model running.
+
+## Point CounterVision at a real client's footage
+
+1. **Drop their mp4s into `videos/<camera-id>/`.** Filenames must start
+   with `YYYYMMDDHHMMSSmmm` (the standard NVR export format) so the
+   pipeline parses the real wall-clock for every event. Example:
+   `videos/till-cam/20260612180530423.mp4`. Camera-folder names
+   become the `camera_id` everywhere in the schema.
+2. **Edit `pipeline/config.yaml`** so each camera entry has a
+   human-meaningful `area` label (e.g. `"Till queue"`,
+   `"Skincare aisle"`, `"Entrance"`). The dashboard renders these
+   labels verbatim.
+3. **Install + run the full pipeline.**
+   ```bash
+   make install
+   make pipeline   # ~25 min for 3 cameras × 3-minute windows on M2 Pro
+   ```
+4. **Tune the entry line per scene.** The auto-default puts a
+   horizontal line at 75 % of frame height. For honest footfall you
+   want it where customers actually enter the camera's field of view:
+   ```bash
+   python pipeline/main.py --draw-zones till-cam
+   ```
+   Left-click polygon vertices, press `l` to switch to entry-line
+   mode, click start and end of the line, press `s` to save back to
+   `config.yaml`. Re-run `make zones` + `make aggregate` after.
+5. **(Optional) Seed the watchlist** for the demo:
+   ```bash
+   python pipeline/main.py --seed-watchlist till-cam P002 known_staff
+   ```
+   Then re-run `make identity` + `make aggregate`. The dashboard's
+   Alerts panel will show a non-accusatory verification prompt with
+   the cosine score attached.
+6. **Tunable thresholds** (in `config.yaml` under `identity:`):
+   * `quality_min` (default `0.55`) — minimum `det_score` for a face to
+     be embedded. Lower for low-light footage; higher to suppress
+     jitter.
+   * `cosine_match` (default `0.32`) — in-camera clustering cutoff.
+     Lower merges more aggressively (over-clusters less); higher
+     splits more (better precision per cluster).
+   * `cross_camera_match` (default `0.50`) — deliberately *higher*
+     than the clustering cutoff. False cross-camera merges hurt the
+     headline number more than missed matches.
+   * `sample_every_n_frames` (default `5`) — face-detection cadence.
+     Lower = more faces seen, more CPU.
+
+The pipeline never invents data. Anything it can't compute from the
+footage (POS conversion, weather, quantified staffing) is emitted as a
+**locked** KPI with an explicit "needs integration" reason; the
+dashboard renders these as "Unlock with integration" pills rather than
+fabricating a number.
+
+## Phase 0 — dry-run on already-installed cameras
 
 ```bash
 # 1. Create the env (Python 3.11; onnxruntime-silicon ceiling)
@@ -17,7 +86,6 @@ brew install uv ffmpeg
 cd pipeline
 uv venv --python 3.11
 uv pip install -e ".[dev]"
-
 # 2. Sanity-check: discover cameras, parse recording-start from filenames,
 #    probe fps + frame size. No model inference.
 uv run python main.py --dry-run

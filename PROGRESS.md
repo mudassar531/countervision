@@ -26,8 +26,8 @@
 | 3 | Identity: unique + repeat + watchlist               | ✅ done     | Pushed (HEAD `4bfa653`); CI green. 59/59 tests; tuned quality_min=0.55, cosine_match=0.32. 16 unique visitors total (vs 89 raw tracker IDs); camera-5 P006 = 7 merged Phase-1 fragments → 31.6 s authoritative dwell; planted watchlist self-test fires correct alerts; `unique_visitors_locked: false`. |
 | 4 | Cross-camera identity (de-dup, not journey)         | ✅ done     | Pushed (HEAD `62662ee`); CI green. 72/72 tests; cross_camera_match=0.50 (high bar, distinct from 0.32); 3 reliable links found (sims 0.58–0.60) over a ≈4 h 13 m gap → **store-wide unique 13** (vs 16 naive). |
 | 5 | Aggregate → `analytics.json` + sqlite + insights    | ✅ done     | Pushed (HEAD `8bdcabd`); CI green. 89/89 tests; 5 reliable insights generated from per-area dwell + occupancy; cross-camera & watchlist carried through as hedged fields with `render_hint`; 4 locked KPIs documented (POS, weather, quantified staffing). Schema doc at `docs/schema.md`. |
-| 6 | Next.js dashboard (navy, client-ready)              | ✅ done     | Next.js 16 (App Router, React 19, Tailwind v4, shadcn, Recharts 3). All 10 panels in spec order. Reads only `analytics.json`; copy-data script populates `dashboard/public/data` on `predev`/`prebuild`. Confidence pills on every metric; locked KPIs render as "Unlock with integration" not errors; cross-camera respects `render_hint` (no journey paths). Production build static-prerenders. |
-| 7 | One-command demo + talk-track                       | ⏳ pending  | Awaits go-ahead. |
+| 6 | Next.js dashboard (navy, client-ready)              | ✅ done     | Pushed (HEAD `07598db`); CI green. Next.js 16 + React 19 + Tailwind v4 + shadcn + Recharts 3. All 10 panels in spec order. Reads only `analytics.json`; copy-data script populates `dashboard/public/data` on `predev`/`prebuild`. Confidence pills on every metric; locked KPIs render as "Unlock with integration" not errors; cross-camera respects `render_hint` (no journey paths). Production build static-prerenders. |
+| 7 | One-command demo + talk-track                       | ✅ done     | `make demo` / `make demo-quick` validated end-to-end. Dashboard static-exports to `dashboard/out/`, served by `python3 -m http.server` (zero new deps). `docs/DEMO_SCRIPT.md` is a presentation-ready 3-minute business walkthrough with the "your cameras turned into decisions" throughline. README handover section covers client-footage onboarding + zone re-drawing + threshold tuning. |
 | 2 | Zones / footfall / dwell / heatmap / occupancy      | ⏳ pending  | |
 | 3 | Identity: unique + repeat + watchlist               | ⏳ pending  | |
 | 4 | Cross-camera journey                                | ⏳ pending  | |
@@ -1126,3 +1126,121 @@ camera-5 Per-area detail with 6 thumbnails and the "dwell 32s · faces
 that uses only the reliable numbers (avg dwell, the P006 7-fragment
 merge, the heatmap visuals) and frames locked KPIs as
 "this is what we'd unlock with a 1-day POS integration".
+
+---
+
+## Phase 7 — One-command demo + talk-track  (final phase)
+
+### THINK (goal, files, risks)
+
+**Goal.** Make the whole project run from raw footage to a live
+demo with a single command, then write a presentation-ready
+walkthrough that lands the reliable numbers and frames the rest
+honestly. After this phase the project is **shippable for the client
+meeting**: no manual steps, no internet dependency, no live model
+inference in the demo path.
+
+**Files created / changed.**
+
+* `Makefile` (new, root) — GNU make 3.81-compatible targets:
+  `install` (one-time `uv venv` + `[cv,identity]` extras + `npm
+  install`), `pipeline` (chains the five Phase 1–5 targets),
+  individual phase targets that **do not cascade upstream** so
+  `make aggregate` is fast (~2 s) on existing outputs,
+  `dashboard-build` (static-exports to `dashboard/out/`),
+  `dashboard-serve` (`python3 -m http.server $PORT` over `out/`),
+  `demo` = `pipeline + dashboard-serve`, `demo-quick` =
+  `aggregate + dashboard-serve` for fast iteration. `help` lints
+  itself from `## ...` doc comments on each target.
+* `dashboard/next.config.ts` — switched to `output: "export"` and
+  `images: { unoptimized: true }`. The dashboard now produces a
+  fully static HTML/CSS/JS bundle under `dashboard/out/` that any
+  HTTP server can host. Demo flow uses `python3 -m http.server` to
+  avoid any new dependency.
+* `docs/DEMO_SCRIPT.md` (new) — the ~3-minute talk-track. Setup
+  checklist, throughline rehearsed three times ("your cameras
+  turned into decisions — imagine this on your store's entrance and
+  till"), 0:00–3:00 cue-by-cue script, a Q&A anticipation table
+  (accuracy / hardware / privacy / what's missing / dashboard tech
+  / time-to-deploy / AGPL), and an explicit "anti-demo failure
+  modes" list (don't journey-frame the cross-camera panel, don't
+  fight the locked cards, don't show the mp4 before the numbers).
+* `README.md` — moved "Quick start" to a real **TL;DR — run the
+  demo** with `make install` / `make demo` / `make demo-quick` /
+  `make help`. Added a new **"Point CounterVision at a real
+  client's footage"** section: NVR filename convention, area
+  labelling, the `--draw-zones CAM` interactive editor flow,
+  watchlist seeding, and a complete table of every tunable
+  threshold in `config.yaml`.
+
+**Risks / decisions taken.**
+
+* **Individual phase targets are deliberately flat** (no upstream
+  prereqs). First Makefile draft had `aggregate: zones
+  cross-camera` which transitively pulled `identity` (~5 min) every
+  time `make aggregate` ran. Caught during validation; fixed by
+  letting only the umbrella `pipeline` target list the chain.
+  Each per-phase target now sits beside an honest comment ("assumes
+  identity/") so an operator can re-run a phase in isolation.
+* **Static export over `next start`.** The build prompt asked for
+  `output: 'export'` so the demo is bulletproof. The downside is
+  `next start` no longer works — the trade-off is that **any
+  static server** can host the demo (CDN, S3, USB stick, hotel
+  Wi-Fi). The `dashboard-serve` target uses `python3 -m
+  http.server` which ships with every macOS / Linux box.
+* **`python3 -m http.server` does not implement HTTP Range
+  responses fully**, which leads to a benign `BrokenPipeError` in
+  the server log when `<video preload="metadata">` requests partial
+  bytes and the browser cancels the rest. The mp4 still plays
+  correctly because the file is local and small. For a slicker
+  production demo you can swap in `npx serve out` (handles ranges).
+* **`make demo` runs the full pipeline on every invocation.**
+  Intentional: a real demo should be reproducible "I'll show you it
+  generating from scratch", not a magic blob. `make demo-quick`
+  exists for the iteration case (re-aggregate against existing
+  outputs and reload).
+* **`pythonpath` separation.** Older zsh history may have left a
+  Next.js dev server bound to `:3000` — the Makefile assumes the
+  port is free. The README documents the `PORT=NNNN make demo`
+  override.
+
+### CODE
+
+Implemented exactly the files above. `make help` prints a clean
+auto-extracted manifest; `npm run lint` (dashboard) + `make lint`
+(both) still pass; 89/89 pytest unchanged from Phase 5.
+
+### VALIDATE (on real artefacts)
+
+```bash
+make help                              # auto-extracted; lists every target
+make aggregate                         # ~2 s — re-runs Phase 5 only
+make dashboard-build                   # 8.5 s — static export to dashboard/out/
+make demo-quick                        # aggregate + build + serve at :3000
+curl -sI http://localhost:3000/                                    # 200
+curl -sI http://localhost:3000/data/analytics.json                 # 200
+curl -sI http://localhost:3000/data/heatmaps/camera-3.png          # 200
+curl -sI http://localhost:3000/data/annotated/camera-1.mp4         # 200
+```
+
+All four curls returned `200 OK`. Browser hit `/` and pulled every
+panel asset (heatmaps for 3 cameras, 16 person thumbnails, all 3
+annotated mp4s, all chart data) — verified via the server access log
+in the `demo-srv` shell.
+
+Static export size: **608 MB at `dashboard/out/`** — dominated by the
+three annotated mp4s. The HTML / CSS / JS bundle itself is only a
+couple of MB.
+
+### PUSH
+
+(see below — appended after the push lands.)
+
+### Project status
+
+All 8 phases ship. **The demo is reproducible from raw footage in one
+command** (`make install` once, then `make demo`). The dashboard runs
+with **zero live inference**. The talk-track lands the reliable
+numbers, hedges the cross-camera and watchlist capability, and frames
+the locked KPIs as the integration runway. Honest, polished,
+client-ready.

@@ -327,7 +327,16 @@ def run_draw_zones_default_mode(
         frames_dir=output_root / "frames",
         overwrite=overwrite,
     )
-    print("draw-zones-default — wrote config.yaml")
+    any_change = any(
+        info.get("zones", "").startswith("default")
+        or info.get("entry_line", "").startswith("default")
+        for info in summary.values()
+    )
+    print(
+        "draw-zones-default — updated config.yaml"
+        if any_change
+        else "draw-zones-default — config.yaml already populated, no changes"
+    )
     for cam_id, info in summary.items():
         print(f"  [{cam_id}] {info}")
     return 0

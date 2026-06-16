@@ -73,10 +73,15 @@ def populate_defaults(
     Reads ``frames/<camera>.jpg`` to get the frame size per camera. If a
     camera already has non-empty ``zones`` / ``entry_line`` and
     ``overwrite=False`` (the default), it's left alone.
+
+    To avoid PyYAML stripping comments from unrelated blocks on every
+    invocation, we only write the file back when at least one camera
+    block actually changed.
     """
     cfg = load_config_yaml(config_path)
     cameras = cfg.get("cameras") or {}
     summary: dict[str, dict[str, Any]] = {}
+    file_dirty = False
 
     for cam_id, block in cameras.items():
         frame_path = frames_dir / f"{cam_id}.jpg"
@@ -94,20 +99,23 @@ def populate_defaults(
         if overwrite or not block.get("zones"):
             block["zones"] = default_zones_for_frame(w, h)
             cam_changes["zones"] = "default (central 60% of frame)"
+            file_dirty = True
         else:
             cam_changes["zones"] = f"kept ({len(block['zones'])} existing)"
 
         if overwrite or block.get("entry_line") in (None, [], {}):
             block["entry_line"] = default_entry_line_for_frame(w, h)
             cam_changes["entry_line"] = "default (horizontal at 75% height)"
+            file_dirty = True
         else:
             cam_changes["entry_line"] = "kept (existing)"
 
         cameras[cam_id] = block
         summary[cam_id] = cam_changes
 
-    cfg["cameras"] = cameras
-    write_config_yaml(config_path, cfg)
+    if file_dirty:
+        cfg["cameras"] = cameras
+        write_config_yaml(config_path, cfg)
     return summary
 
 
