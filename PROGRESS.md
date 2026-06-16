@@ -27,7 +27,7 @@
 | 4 | Cross-camera identity (de-dup, not journey)         | ✅ done     | Pushed (HEAD `62662ee`); CI green. 72/72 tests; cross_camera_match=0.50 (high bar, distinct from 0.32); 3 reliable links found (sims 0.58–0.60) over a ≈4 h 13 m gap → **store-wide unique 13** (vs 16 naive). |
 | 5 | Aggregate → `analytics.json` + sqlite + insights    | ✅ done     | Pushed (HEAD `8bdcabd`); CI green. 89/89 tests; 5 reliable insights generated from per-area dwell + occupancy; cross-camera & watchlist carried through as hedged fields with `render_hint`; 4 locked KPIs documented (POS, weather, quantified staffing). Schema doc at `docs/schema.md`. |
 | 6 | Next.js dashboard (navy, client-ready)              | ✅ done     | Pushed (HEAD `07598db`); CI green. Next.js 16 + React 19 + Tailwind v4 + shadcn + Recharts 3. All 10 panels in spec order. Reads only `analytics.json`; copy-data script populates `dashboard/public/data` on `predev`/`prebuild`. Confidence pills on every metric; locked KPIs render as "Unlock with integration" not errors; cross-camera respects `render_hint` (no journey paths). Production build static-prerenders. |
-| 7 | One-command demo + talk-track                       | ✅ done     | `make demo` / `make demo-quick` validated end-to-end. Dashboard static-exports to `dashboard/out/`, served by `python3 -m http.server` (zero new deps). `docs/DEMO_SCRIPT.md` is a presentation-ready 3-minute business walkthrough with the "your cameras turned into decisions" throughline. README handover section covers client-footage onboarding + zone re-drawing + threshold tuning. |
+| 7 | One-command demo + talk-track                       | ✅ done     | Pushed (HEAD `af712ab`); CI green. `make demo` / `make demo-quick` validated end-to-end. Dashboard static-exports to `dashboard/out/`, served by `python3 -m http.server` (zero new deps). `docs/DEMO_SCRIPT.md` is a presentation-ready 3-minute business walkthrough with the "your cameras turned into decisions" throughline. README handover section covers client-footage onboarding + zone re-drawing + threshold tuning. **All 8 phases ship.** |
 | 2 | Zones / footfall / dwell / heatmap / occupancy      | ⏳ pending  | |
 | 3 | Identity: unique + repeat + watchlist               | ⏳ pending  | |
 | 4 | Cross-camera journey                                | ⏳ pending  | |
@@ -1248,3 +1248,21 @@ with **zero live inference**. The talk-track lands the reliable
 numbers, hedges the cross-camera and watchlist capability, and frames
 the locked KPIs as the integration runway. Honest, polished,
 client-ready.
+
+---
+
+## Next horizon — PRODUCTION (deferred; awareness only)
+
+After the client meeting the planned next horizon is **live CCTV in
+production** — edge box at the store pulling RTSP/ONVIF streams,
+metadata-only sync to a cloud DB + API, dashboard polling the API
+instead of reading a static JSON.
+
+**Do not begin any of that work until explicitly instructed.** See
+[`PRODUCTION_DIRECTION.md`](./PRODUCTION_DIRECTION.md) for the four
+architectural seams to preserve in the meantime ("same brain, new
+body": input-agnostic analytics modules, config-driven `device`,
+stable `analytics.json` schema, models behind a provider abstraction)
+and the licence gate (YOLO26 AGPL-3.0 + InsightFace non-commercial
+weights must be swapped before any paid deployment).
+
