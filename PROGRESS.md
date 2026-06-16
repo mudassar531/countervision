@@ -24,7 +24,8 @@
 | 1 | Detect + track (YOLO26 MPS + BoT-SORT)              | ✅ done     | Pushed (HEAD `327913e`); CI green. 27/27 tests, 3 cameras × 180 s validated on real footage — 89 unique IDs, 38 ID-switch-proxy events, ID #28 survived a 2.20 s occlusion. |
 | 2 | Zones / footfall / dwell / heatmap / occupancy      | ✅ done     | Pushed (HEAD `6e75615`); CI green. 43/43 tests, real-footage run validated (heatmaps overlay correctly; provisional dwell + occupancy timeseries written; `unique_visitors_locked: true` everywhere). |
 | 3 | Identity: unique + repeat + watchlist               | ✅ done     | Pushed (HEAD `4bfa653`); CI green. 59/59 tests; tuned quality_min=0.55, cosine_match=0.32. 16 unique visitors total (vs 89 raw tracker IDs); camera-5 P006 = 7 merged Phase-1 fragments → 31.6 s authoritative dwell; planted watchlist self-test fires correct alerts; `unique_visitors_locked: false`. |
-| 4 | Cross-camera journey                                | ⏳ pending  | Awaits go-ahead. |
+| 4 | Cross-camera identity (de-dup, not journey)         | ✅ done     | 72/72 tests; cross_camera_match=0.50 (high bar, distinct from 0.32); 3 reliable links found (sims 0.58–0.60) over a ≈4 h 13 m gap → **store-wide unique 13** (vs 16 naive). |
+| 5 | Aggregate → `analytics.json` + sqlite + insights    | ⏳ pending  | Awaits go-ahead. |
 | 2 | Zones / footfall / dwell / heatmap / occupancy      | ⏳ pending  | |
 | 3 | Identity: unique + repeat + watchlist               | ⏳ pending  | |
 | 4 | Cross-camera journey                                | ⏳ pending  | |

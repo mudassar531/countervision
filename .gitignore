@@ -36,6 +36,7 @@ data/output/tracks/
 data/output/zones/
 data/output/identity/
 data/output/persons/
+data/output/cross_camera.json
 data/output/logs/
 data/output/cache/
 

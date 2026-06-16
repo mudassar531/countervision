@@ -387,6 +387,10 @@ def _save_thumbnails_and_alerts(
                 "watchlist_match": wl_label,
                 "watchlist_similarity": round(wl_sim, 4),
                 "thumbnail": str(thumb_path.relative_to(PROJECT_ROOT)),
+                # Cluster centroid (L2-normalized) + raw embedding sum
+                # so Phase 4 (cross-camera) can match without re-decoding
+                # video or rerunning InsightFace. 512-d, JSON-friendly.
+                "embedding_centroid": [round(float(v), 6) for v in p.centroid.tolist()],
             }
         )
 

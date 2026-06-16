@@ -48,12 +48,54 @@ uv run python main.py --run-identity
 # uv run python main.py --seed-watchlist camera-5 P006 staff_lead_demo
 # uv run python main.py --run-identity
 
-# 6. Tests + lint
+# 6. Phase 4 — cross-camera identity (de-dup people across cameras).
+#    Reads identity/<cam>.json from Phase 3 (no model run, no video
+#    decode); writes data/output/cross_camera.json with the headline
+#    store-wide unique-visitor count. Honest framing for non-overlapping
+#    recordings: "same face seen across the captured period" (repeat
+#    presence), not single continuous trips.
+uv run python main.py --run-cross-camera
+
+# 7. Tests + lint
 uv run ruff check ..
 uv run pytest ../tests -q
 ```
 
 The dry-run is what CI runs on every push (`.github/workflows/ci.yml`).
+
+## Phase 4 outputs
+
+`uv run python main.py --run-cross-camera` reads each Phase-3
+`identity/<camera>.json`, matches centroids across cameras at a
+deliberately-higher threshold, and writes:
+
+- `data/output/cross_camera.json` — schema:
+  - `headline.store_wide_unique_visitors` (the dashboard's headline
+    KPI), `naive_total_per_camera_sum`,
+    `saved_by_cross_camera_dedup`, `cross_camera_links_count`,
+    `no_reliable_cross_camera_matches`, `headline_message`.
+  - `thresholds` block records the two distinct cosine cutoffs
+    (`in_camera_cluster` for Phase 3 = 0.32,
+    `cross_camera_match` for Phase 4 = 0.50) and the
+    `min_face_appearances_for_cross_camera` gate.
+  - `cross_camera_links[]` — only pairs above
+    `cross_camera_match`, each carrying `similarity`, `time_gap`,
+    and a `presence_note` framing the link as "**repeat presence
+    across the captured period**, not a single continuous trip"
+    (the camera windows do not overlap by hours).
+  - `store_wide_persons[]` — connected components of the
+    cross-camera match graph, numbered `S001…` by earliest
+    `first_seen`.
+
+**Honesty paths enforced in code:**
+
+- If no pair clears the high threshold,
+  `no_reliable_cross_camera_matches: true` fires,
+  `store_wide_unique_visitors` falls back to the per-camera sum,
+  and the CLI prints a ⚠ warning. We never invent a link.
+- Persons with `face_appearances < 3` are excluded from the matching
+  pool (centroid too noisy) but **kept in the headline count** so
+  they aren't disappeared from totals.
 
 ## Phase 3 outputs
 

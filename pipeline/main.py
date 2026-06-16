@@ -82,6 +82,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Phase 3: run InsightFace, write identity/<cam>.json + persons/<cam>/<Pxxx>.jpg.",
     )
     parser.add_argument(
+        "--run-cross-camera",
+        action="store_true",
+        help="Phase 4: dedup people across cameras using identity centroids.",
+    )
+    parser.add_argument(
         "--seed-watchlist",
         nargs="+",
         metavar="CAM PERSON [LABEL]",
@@ -542,6 +547,30 @@ def run_seed_watchlist_mode(output_root: Path, args: list[str]) -> int:
     return 0
 
 
+def run_cross_camera_mode(config: PipelineConfig, output_root: Path) -> int:
+    from countervision.cross_camera import run_cross_camera, summarize_results
+
+    identity_dir = output_root / "identity"
+    if not identity_dir.is_dir():
+        print(
+            f"ERROR: no identity outputs at {identity_dir}. "
+            "Run --run-identity first.",
+            file=sys.stderr,
+        )
+        return 2
+
+    icfg = config.identity
+    result = run_cross_camera(
+        identity_dir=identity_dir,
+        out_root=output_root,
+        cross_camera_match=float(icfg.get("cross_camera_match", 0.50)),
+        in_camera_cluster=float(icfg.get("cosine_match", 0.32)),
+        min_face_appearances=int(icfg.get("min_face_appearances_for_cross_camera", 3)),
+    )
+    print(summarize_results(result))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     log = configure_logging(args.log_level)
@@ -562,12 +591,15 @@ def main(argv: list[str] | None = None) -> int:
         return run_zones_mode(config, args.videos_root, args.output_root)
     if args.run_identity:
         return run_identity_mode(config, args.videos_root, args.output_root, window)
+    if args.run_cross_camera:
+        return run_cross_camera_mode(config, args.output_root)
     if args.seed_watchlist:
         return run_seed_watchlist_mode(args.output_root, args.seed_watchlist)
 
     print(
         "Nothing to do. Modes: --dry-run / --run-detect-track / --draw-zones-default / "
-        "--draw-zones CAM / --run-zones / --run-identity / --seed-watchlist CAM PID [LABEL].",
+        "--draw-zones CAM / --run-zones / --run-identity / --run-cross-camera / "
+        "--seed-watchlist CAM PID [LABEL].",
         file=sys.stderr,
     )
     return 1

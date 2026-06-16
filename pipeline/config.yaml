@@ -60,4 +60,14 @@ identity:
   quality_min: 0.55
   cosine_match: 0.32
   sample_every_n_frames: 5
+  # Phase 4 — cross-camera linking. Deliberately HIGHER bar than the
+  # in-camera clustering threshold so we trade recall for precision when
+  # de-duping across cameras (false-merge of two distinct people across
+  # cameras is much worse than missing a true match for the headline
+  # store-wide-unique number).
+  cross_camera_match: 0.50
+  # Phase 4 quality gate — persons with very few face appearances have a
+  # noisy centroid, so we skip them from cross-camera matching to keep
+  # the dedup precise.
+  min_face_appearances_for_cross_camera: 3
 behaviour: {loiter_seconds: 90}
