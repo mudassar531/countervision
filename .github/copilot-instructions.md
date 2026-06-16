@@ -11,12 +11,17 @@ retail story matter as much as the code.
    "what", the "why", and the phase order). Everything you need is in there.
 2. Read/maintain **`PROGRESS.md`** (current phase, decisions, next steps). Create it if missing.
    Re-read both files at the start of every session.
-3. Read **`PRODUCTION_DIRECTION.md`** before making any code change. The 8-phase demo build is
-   complete; the next horizon is **live CCTV in production**, but **do not begin any
-   production/live-CCTV work until explicitly instructed**. The doc lists four architectural
-   seams to preserve so the future pivot is a swap, not a rewrite (input-agnostic analytics
-   modules, config-driven `device`, stable `analytics.json` schema, models behind a provider
-   abstraction).
+3. Read **`PRODUCTION_DIRECTION.md`** AND **`docs/PRODUCTION_MODEL_SPEC.md`** before making any
+   code change. The 8-phase demo build is complete; the next horizon is **live CCTV in
+   production**, but **do not begin any production/live-CCTV work until explicitly
+   instructed.** `PRODUCTION_DIRECTION.md` lists four architectural seams to preserve so the
+   future pivot is a swap, not a rewrite (input-agnostic analytics modules, config-driven
+   `device`, stable `analytics.json` schema, models behind a provider abstraction).
+   `docs/PRODUCTION_MODEL_SPEC.md` is the locked production model stack — RF-DETR + AuraFace
+   (InsightFace swap pending) + SOLIDER + Faiss with **GEFF-style late fusion** (face anchor +
+   body continuity); never early-fuse. When production work begins, resolve the open licensing
+   items (face detector weights, AGPL tracker implementations, Re-ID training data) before any
+   paid deployment.
 
 ## How to work
 - Build **strictly phase-by-phase** per `COPILOT_BUILD_PROMPT.md`: THINK → CODE → VALIDATE (run on real

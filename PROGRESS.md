@@ -1258,11 +1258,51 @@ production** — edge box at the store pulling RTSP/ONVIF streams,
 metadata-only sync to a cloud DB + API, dashboard polling the API
 instead of reading a static JSON.
 
-**Do not begin any of that work until explicitly instructed.** See
-[`PRODUCTION_DIRECTION.md`](./PRODUCTION_DIRECTION.md) for the four
-architectural seams to preserve in the meantime ("same brain, new
-body": input-agnostic analytics modules, config-driven `device`,
-stable `analytics.json` schema, models behind a provider abstraction)
-and the licence gate (YOLO26 AGPL-3.0 + InsightFace non-commercial
-weights must be swapped before any paid deployment).
+**Do not begin any of that work until explicitly instructed.** Two
+docs together govern the production pivot — read both, every session
+that touches production code:
+
+* [`PRODUCTION_DIRECTION.md`](./PRODUCTION_DIRECTION.md) — the four
+  architectural seams to preserve in the meantime ("same brain, new
+  body": input-agnostic analytics modules, config-driven `device`,
+  stable `analytics.json` schema, models behind a provider
+  abstraction) and the high-level deployment shape (edge processing,
+  metadata-only cloud sync).
+* [`docs/PRODUCTION_MODEL_SPEC.md`](./docs/PRODUCTION_MODEL_SPEC.md)
+  — the **locked production model stack**: RF-DETR (Apache-2.0,
+  replaces YOLO26 AGPL) for person detection; **AuraFace R100**
+  (commercial, deployable default) for face embeddings with an
+  **InsightFace SCRFD + ArcFace R100 swap pending** (config/weight
+  swap only, not an architecture change); **SOLIDER (Swin-Base)** for
+  body / appearance Re-ID; **BoT-SORT + Re-ID** for within-camera
+  continuity; **Faiss → Milvus** for the cross-day face gallery;
+  **GEFF-style late (score-level) fusion** (Arkushin et al., WACV
+  2024 Workshops) — face anchor overrides body when visible, body
+  carries continuity when not. **Never early-fuse face + body
+  embeddings.** Three-stage architecture: entrance enrollment →
+  interior continuity → cross-day face-anchored recall, with three
+  distinct memory lifetimes (frame buffer, session/blind-spot
+  gallery with ~5 min timeout, indefinite Faiss face gallery subject
+  to retention).
+
+**Open licensing items to resolve before any PAID deployment** (per
+`PRODUCTION_MODEL_SPEC.md` § "Licensing"): (1) face detector weights
+— SCRFD code is MIT but InsightFace weights are non-commercial;
+either pair AuraFace with a permissively-licensed detector (YuNet /
+MediaPipe) or cover under an InsightFace commercial license. (2)
+Tracker implementations — BoT-SORT the algorithm is unencumbered but
+the popular Ultralytics / BoxMOT implementations are AGPL-3.0; needs
+a clean-room association implementation or a commercial Ultralytics
+license. (3) Re-ID training data — SOLIDER code is MIT but verify
+LUPerson / Market-1501 / MSMT17 terms; clean fallback is **NVIDIA TAO
+ReIdentificationNet**. (4) **Never ship MS1M / WebFace-trained face
+weights commercially** (AdaFace / LVFace / InsightFace default zoo).
+
+The model spec stays **consistent with the four seams** in
+`PRODUCTION_DIRECTION.md`: model abstraction (AuraFace ↔ InsightFace
+↔ RF-DETR variants = config swap), embedding-store interface
+(Faiss → Milvus = backend swap), fusion as its own layer (so the
+GEFF logic is testable in isolation), device-agnostic config, and
+`analytics.json` remains the dashboard contract.
+
 

@@ -62,6 +62,11 @@ yolo*.pt
 .idea/
 *.swp
 
+# Stray PDFs / scratch notes the user may drop in the repo root
+/Claude.pdf
+/*.pdf
+/Notes/
+
 # Playwright MCP scratch
 .playwright-mcp/
 

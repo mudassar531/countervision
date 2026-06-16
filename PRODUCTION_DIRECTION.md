@@ -46,6 +46,7 @@ Keep these seams clean so the future pivot is a swap, not a rewrite. (These are 
   object storage; a live API the dashboard polls; auth, retention/DPIA, monitoring.
 
 ## Operating rule
-Re-read this file (plus `PROGRESS.md` and `COPILOT_BUILD_PROMPT.md`) at the start of every session.
+Re-read this file (plus `PROGRESS.md`, `COPILOT_BUILD_PROMPT.md`, and
+`docs/PRODUCTION_MODEL_SPEC.md`) at the start of every session.
 **Do not begin any production/live-CCTV work until explicitly instructed.** Until then, this is
 awareness only — it shapes how you keep the seams clean, nothing more.
