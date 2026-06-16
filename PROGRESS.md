@@ -26,7 +26,8 @@
 | 3 | Identity: unique + repeat + watchlist               | ✅ done     | Pushed (HEAD `4bfa653`); CI green. 59/59 tests; tuned quality_min=0.55, cosine_match=0.32. 16 unique visitors total (vs 89 raw tracker IDs); camera-5 P006 = 7 merged Phase-1 fragments → 31.6 s authoritative dwell; planted watchlist self-test fires correct alerts; `unique_visitors_locked: false`. |
 | 4 | Cross-camera identity (de-dup, not journey)         | ✅ done     | Pushed (HEAD `62662ee`); CI green. 72/72 tests; cross_camera_match=0.50 (high bar, distinct from 0.32); 3 reliable links found (sims 0.58–0.60) over a ≈4 h 13 m gap → **store-wide unique 13** (vs 16 naive). |
 | 5 | Aggregate → `analytics.json` + sqlite + insights    | ✅ done     | Pushed (HEAD `8bdcabd`); CI green. 89/89 tests; 5 reliable insights generated from per-area dwell + occupancy; cross-camera & watchlist carried through as hedged fields with `render_hint`; 4 locked KPIs documented (POS, weather, quantified staffing). Schema doc at `docs/schema.md`. |
-| 6 | Next.js dashboard (navy, client-ready)              | ⏳ pending  | Awaits go-ahead. |
+| 6 | Next.js dashboard (navy, client-ready)              | ✅ done     | Next.js 16 (App Router, React 19, Tailwind v4, shadcn, Recharts 3). All 10 panels in spec order. Reads only `analytics.json`; copy-data script populates `dashboard/public/data` on `predev`/`prebuild`. Confidence pills on every metric; locked KPIs render as "Unlock with integration" not errors; cross-camera respects `render_hint` (no journey paths). Production build static-prerenders. |
+| 7 | One-command demo + talk-track                       | ⏳ pending  | Awaits go-ahead. |
 | 2 | Zones / footfall / dwell / heatmap / occupancy      | ⏳ pending  | |
 | 3 | Identity: unique + repeat + watchlist               | ⏳ pending  | |
 | 4 | Cross-camera journey                                | ⏳ pending  | |
@@ -955,3 +956,168 @@ budget goes here — KPI cards, per-area heatmap hero, footfall-by-hour,
 dwell-by-area, occupancy line, annotated video player, alerts feed
 (with hedged copy on watchlist!), insights panel, and a journey-style
 visual that respects the `render_hint` on `cross_camera`.
+
+---
+
+## Phase 6 — Next.js dashboard (navy, client-ready)
+
+### THINK (goal, files, risks)
+
+**Goal.** A genuinely client-ready Next.js 16 dashboard reading **only**
+`analytics.json`. All 10 panels in spec order, with confidence-tier
+visual treatment on every metric, lock-as-CTA framing on POS / weather
+fields, and the cross-camera `render_hint` respected (no journey
+arrows, only "repeat presence" framing). Annotated mp4s play directly
+— no canvas sync — because overlays were burned in by Phase 1.
+
+**Context7 + Next 16 docs lookups (done first).** Verified:
+* Next.js 16.2.9 ships Turbopack + Tailwind v4 by default. `params` /
+  `searchParams` are now async-only — we don't use dynamic routes so
+  this doesn't bite.
+* shadcn/ui CLI `npx shadcn@latest init --defaults` (Nova preset) +
+  `add card badge separator tabs avatar table tooltip` works with
+  Tailwind v4's `@theme inline` approach. Components land in
+  `src/components/ui/`.
+* Recharts 3.8 with React 19: any chart-using component needs
+  `"use client"`; bars render as `<path>` (rounded corners), not
+  `<rect>`.
+
+**Files created (all new — `dashboard/` was empty).**
+
+* `dashboard/` — Next.js 16 + Tailwind v4 + shadcn (`Geist` font,
+  Nova preset, Lucide icons, Radix base).
+* `dashboard/scripts/copy-data.cjs` — predev/prebuild script copies
+  `data/output/{analytics.json,analytics.db,annotated,frames,heatmaps,persons,alerts}`
+  into `dashboard/public/data/` (gitignored). Idempotent; rmrf + recopy.
+* `dashboard/src/lib/analytics.ts` — full TS shape of the analytics
+  contract (`Analytics`, `Kpis`, `Visitor`, `Alert`, `CrossCamera`,
+  `Insight`, etc.) + `asPublicUrl(...)` which handles both relative
+  and absolute paths the pipeline may write.
+* `dashboard/src/app/globals.css` — navy `#0A1347` → OKLCH theme
+  variables (`--navy`, `--primary`, charts, sidebar). Light theme is
+  the demo default; dark vars defined for future toggle.
+* `dashboard/src/app/page.tsx` — server component, reads
+  `public/data/analytics.json` via `fs/promises`, lays out all 10
+  panels in the spec's exact order.
+* `dashboard/src/components/`
+  * `kpi.tsx` — `KpiCard`, `LockedKpiCard`, `ConfidencePill` (the
+    high/medium/low/locked pill system used across the dashboard).
+  * `charts.tsx` — Recharts (footfall bar, dwell-by-area bar,
+    occupancy line) with the navy palette + legends + custom tooltips.
+  * `heatmap-hero.tsx` — per-camera tabs with toggle between
+    heatmap overlay and the clean Phase-1 frame.
+  * `area-detail.tsx` — per-camera tabs with the occupancy timeline
+    + a grid of visitor thumbnails (with `repeat` / `watchlist`
+    badges and the killer "7 merged ids" stat for P006).
+  * `video-panel.tsx` — `<video controls poster={frame_jpg}>` per
+    camera tab; **no canvas sync** because Phase 1 already burned
+    the overlays into the mp4.
+  * `alerts-feed.tsx` — non-accusatory review-prompt cards sorted by
+    severity, with similarity attached.
+  * `insights-and-cross.tsx` — `InsightsPanel` and `CrossCameraPanel`.
+    The cross-camera panel surfaces the `render_hint` verbatim in its
+    own description and lists each link with similarity + time gap +
+    presence note; never as a "journey".
+* `dashboard/package.json` — added `predev` / `prebuild` invoking
+  the copy-data script.
+* `dashboard/.gitignore` — adds `/public/data/` so the 605 MB of
+  copied artefacts never get committed.
+* `.gitignore` (root) — adds `.playwright-mcp/` to keep MCP scratch
+  out of git.
+
+**Panel order (matches the spec literally).**
+
+1. **Branded Overview** — navy hero with CV wordmark, store name,
+   capture window pill, camera/area/visitor counts.
+2. **KPI cards** (8 total) — reliable headline first
+   (**accent navy**: avg dwell + store-wide unique), then medium
+   (repeat visitors, peak hour), then hedged (footfall, watchlist),
+   then **locked** (conversion rate, revenue uplift) framed as
+   "Unlock with POS integration".
+3. **Per-area heatmap hero** — camera tabs; toggle between heatmap
+   overlay and clean frame; stats strip below.
+4. **Footfall by hour** — Recharts bar (sparse data is honest).
+5. **Dwell by area** — Recharts bar (avg + max).
+6. **Per-area detail** — occupancy timeline + visitor thumbnails
+   (the P006 "7 merged ids" badge is the killer moment for the demo).
+7. **Cross-camera presence** — hedged; `render_hint` shown verbatim
+   to the user; each link carries similarity + time gap + presence
+   note; never rendered as a continuous journey arrow.
+8. **Annotated walkthrough** — per-camera `<video>` with
+   first-frame poster; overlays already burned in.
+9. **Alerts feed** — severity-sorted; non-accusatory copy with
+   similarity attached.
+10. **Plain-English insights** — 5 reliable insights surfaced with
+    their own confidence pill.
+
+**Risks / decisions taken.**
+
+* **Two early bugs caught by Playwright + fixed.**
+  * `buildCameraVideoList` exported from a `"use client"` module
+    can't be called from a server component (Next 16 server/client
+    boundary enforced strictly) — inlined the helper in `page.tsx`.
+  * `asPublicUrl` originally stripped only a leading `data/output/`
+    prefix; the Phase-5 JSON sometimes carries absolute paths like
+    `/Users/.../data/output/frames/x.jpg` (because Phase 3 used
+    `str(image_path)` for watchlist entries). Rewrote to extract
+    after the `data/output/` substring wherever it appears.
+* **No `next/image` for the heatmap / frame / thumbnails.** The
+  camera-5 mp4 carries a filename with spaces; `next/image` plus
+  query strings have new `localPatterns.search` requirements in 16,
+  and frames may also have unusual characters. Used plain
+  `<img src={encodeURI(src)}>` for everything — safer and we don't
+  need responsive image sizes for a single client demo.
+* **Annotated mp4 plays directly, no canvas sync** — per the spec.
+  Overlays (boxes, IDs, traces, navy HUD with wall-clock) are burned
+  in by Phase 1 already, so the panel is bulletproof for the live
+  demo (no JS sync that can desync).
+* **Cross-camera panel does NOT render arrows / paths.** Per the
+  spec, the page renders the `render_hint` ("Dashboard MUST render
+  cross-camera links with hedging copy from `presence_note`.
+  Recording windows do not overlap; do not render these as continuous
+  'journeys'.") as the panel's own description, so the reader sees the
+  caveat before the data.
+* **Tailwind v4 OKLCH navy.** `#0A1347` ≈ `oklch(0.184 0.117 274.6)`.
+  All shadcn semantic tokens (primary, ring, sidebar, chart-1) map
+  to the navy. Chart palette uses navy + a navy-tint + accent
+  cool-tones so everything reads coherently.
+* **Heavy artefacts gitignored.** `dashboard/public/data/` is 605 MB
+  of copied mp4s and pngs — regenerated locally via `predev`/`prebuild`.
+
+### CODE
+
+Implemented exactly the files above; `npm run lint` clean,
+`npm run build` succeeds and statically prerenders the page. Verified
+with Playwright screenshots at 1440×900: every panel renders, all 3
+camera tabs work in heatmap hero / per-area detail / video panel, the
+"7 merged ids" P006 win is visible in camera-5's Per-area detail.
+
+### VALIDATE (on real footage)
+
+```bash
+cd dashboard
+npm install      # one-time
+npm run dev      # auto-runs predev (copy data/output → public/data)
+# open http://localhost:3000
+npm run lint     # passes
+npm run build    # passes — static prerender of `/`
+```
+
+Captured screenshots showed each panel rendering with the expected
+data (e.g. camera-3 heatmap with two clean hot spots on the seated
+guys, "8 unique faces · 96s avg dwell · 3 peak occupancy" stats strip;
+camera-5 Per-area detail with 6 thumbnails and the "dwell 32s · faces
+58 · 7 merged ids" stat on P006).
+
+### PUSH
+
+(see below — appended after the push lands.)
+
+### NEXT — Phase 7 (do not start yet)
+
+`make demo` one-command flow that runs the full pipeline over
+`videos/` and then static-exports the dashboard. Plus
+`docs/DEMO_SCRIPT.md` — a ~3-minute walkthrough with business framing
+that uses only the reliable numbers (avg dwell, the P006 7-fragment
+merge, the heatmap visuals) and frames locked KPIs as
+"this is what we'd unlock with a 1-day POS integration".

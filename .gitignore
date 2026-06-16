@@ -62,6 +62,9 @@ yolo*.pt
 .idea/
 *.swp
 
+# Playwright MCP scratch
+.playwright-mcp/
+
 # Input footage — exceeds GitHub's 100MB per-file limit and is not part of
 # the source. Cameras / folders themselves are tracked via .gitkeep so the
 # discovery code finds them after a fresh clone; drop your own .mp4/.mov

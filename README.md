@@ -63,12 +63,61 @@ uv run python main.py --run-cross-camera
 #    dashboard renders 'data not available' instead of a made-up number.
 uv run python main.py --run-aggregate
 
-# 8. Tests + lint
+# 9. Phase 6 — Next.js 16 dashboard (navy, client-ready).
+#    Reads only data/output/analytics.json (no live inference).
+cd dashboard && npm install        # one-time
+npm run dev                        # auto-runs predev: copies data/output -> public/data
+# open http://localhost:3000
+npm run build                      # static prerender
+cd ..
+
+# 10. Tests + lint
+cd pipeline
 uv run ruff check ..
 uv run pytest ../tests -q
 ```
 
 The dry-run is what CI runs on every push (`.github/workflows/ci.yml`).
+
+## Phase 6 — dashboard
+
+The dashboard is a self-contained Next.js 16 app (App Router, React 19,
+Tailwind v4, shadcn/ui, Recharts 3) under `dashboard/`. It reads
+**only** `data/output/analytics.json` (plus the static heatmaps,
+frames, mp4s, thumbnails the JSON points at). A
+`predev`/`prebuild` hook (`dashboard/scripts/copy-data.cjs`) copies
+the Phase 1–5 artefacts into `dashboard/public/data/` on demand.
+
+```bash
+cd dashboard
+npm install
+npm run dev   # http://localhost:3000
+npm run build # static prerender, ready for `next export` in Phase 7
+```
+
+The page lays out 10 panels in spec order:
+
+1. **Branded Overview** (navy hero with capture window).
+2. **KPI cards** — reliable numbers up front; locked KPIs (POS /
+   weather / staffing) render as "Unlock with integration" pills,
+   never as errors or fake numbers.
+3. **Per-area heatmap hero** — camera tabs; heatmap ↔ clean frame.
+4. **Footfall by hour** (bar) — hedged with low-confidence pill.
+5. **Dwell by area** (bar, avg + max) — high confidence.
+6. **Per-area detail** — occupancy timeline + visitor thumbnails
+   (the P006 "7 merged ids" badge is visible on camera-5).
+7. **Cross-camera presence** — hedged; the `render_hint` from the
+   schema is shown verbatim ("repeat presence, not a single
+   continuous trip").
+8. **Annotated walkthrough** — `<video>` plays the pre-rendered
+   mp4 directly; no canvas overlay sync needed (overlays were burned
+   in by Phase 1).
+9. **Alerts feed** — non-accusatory review prompts with similarity.
+10. **Plain-English insights** — 5 reliable retail recommendations.
+
+Every metric carries an explicit `confidence` pill
+(`high` / `medium` / `low` / `locked`) so the client sees at a glance
+what's hard fact vs what to verify.
 
 ## Phase 5 outputs
 
