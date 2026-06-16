@@ -30,8 +30,14 @@ cv = [
     "supervision>=0.25",   # Detections / annotators / VideoSink
     "lap>=0.5.12",         # linear-assignment for BoT-SORT
 ]
-# Heavier deps still deferred to Phase 3 (identity):
-#   insightface, onnxruntime-silicon
+# Phase 3 — face identity. Apple Silicon ceiling pins Python to 3.11
+# (onnxruntime-silicon wheel availability). First run downloads
+# buffalo_l weights to ~/.insightface/models (~326 MB).
+identity = [
+    "insightface>=0.7.3",
+    "onnxruntime-silicon>=1.16; sys_platform == 'darwin'",
+    "onnxruntime>=1.16;          sys_platform != 'darwin'",
+]
 dev = [
     "pytest>=8.2",
     "ruff>=0.5",

@@ -34,8 +34,18 @@ data/output/frames/
 data/output/alerts/
 data/output/tracks/
 data/output/zones/
+data/output/identity/
+data/output/persons/
 data/output/logs/
 data/output/cache/
+
+# Watchlist source images — faces are sensitive PII, never commit.
+watchlist/*.jpg
+watchlist/*.jpeg
+watchlist/*.png
+watchlist/*.JPG
+watchlist/*.JPEG
+watchlist/*.PNG
 
 # Model weights downloaded at runtime
 *.pt

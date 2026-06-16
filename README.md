@@ -39,12 +39,59 @@ uv run python main.py --draw-zones-default            # central 60% polygon + ho
 # uv run python main.py --draw-zones camera-1
 uv run python main.py --run-zones                     # writes zones/<cam>.json + heatmaps/<cam>.png
 
-# 5. Tests + lint
+# 5. Phase 3 — face identity (InsightFace buffalo_l, CPU on M2).
+#    First run downloads ~326 MB of buffalo_l weights to ~/.insightface.
+uv pip install -e ".[cv,identity]"
+uv run python main.py --run-identity
+# Demo helper: copy a discovered person's full frame into ./watchlist/
+# and re-run to see the watchlist alert flow fire end-to-end:
+# uv run python main.py --seed-watchlist camera-5 P006 staff_lead_demo
+# uv run python main.py --run-identity
+
+# 6. Tests + lint
 uv run ruff check ..
 uv run pytest ../tests -q
 ```
 
 The dry-run is what CI runs on every push (`.github/workflows/ci.yml`).
+
+## Phase 3 outputs
+
+`uv run python main.py --run-identity` runs InsightFace `buffalo_l`
+(SCRFD + ArcFace, CPU on M2) over the same window as Phase 1, sampling
+every `identity.sample_every_n_frames` frames. Writes, per camera:
+
+- `data/output/identity/<camera>.json` —
+  `unique_visitors_count` (AUTHORITATIVE),
+  `unique_visitors_locked: false` (UNLOCKING Phase 2's sentinel),
+  `persons[]` with `linked_tracker_ids` + authoritative
+  `track_dwell_seconds_authoritative` (union of frames where any
+  linked tracker ID is alive — replaces Phase 2's provisional
+  per-track dwell), `face_dwell_seconds_authoritative`, `visit_count`,
+  `is_repeat`, `watchlist_match`, `watchlist_similarity`.
+- `data/output/persons/<camera>/<Pxxx>.jpg` (thumbnail) +
+  `<Pxxx>_full.jpg` (full frame at the best-quality moment, used by
+  `--seed-watchlist` for redetectable seeds).
+- `data/output/alerts/<id>.jpg` — full-frame screenshot per alert.
+- `data/output/phase3_summary.json` — orchestrator-level roll-up
+  with the tuned thresholds.
+
+**Alert design.** Every event is a non-accusatory review prompt:
+
+- Watchlist: *"Possible match with watchlist entry 'X' (face
+  similarity 0.XX). Please verify before acting."*
+- Repeat:   *"Possibly a returning visitor — face seen across N
+  separate visits in this window. Please verify."*
+
+Severity is set from cosine similarity for watchlist hits
+(`info < 0.45`, `warn 0.45–0.60`, `high ≥ 0.60`) so the dashboard
+can prioritise without dropping any signal.
+
+**Watchlist seeding for the demo.**
+`uv run python main.py --seed-watchlist CAM PID [LABEL]` copies the
+person's full-frame jpg into `./watchlist/`. Re-run `--run-identity`
+to see the alert fire — useful for showing the flow without supplying
+real reference photos. Watchlist images are gitignored (faces = PII).
 
 ## Phase 2 outputs
 

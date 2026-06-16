@@ -55,5 +55,9 @@ cameras:
     entry_line:
       start: [288, 810]
       end: [1632, 810]
-identity: {enabled: true, quality_min: 0.55, cosine_match: 0.38, sample_every_n_frames: 5}
+identity:
+  enabled: true
+  quality_min: 0.55
+  cosine_match: 0.32
+  sample_every_n_frames: 5
 behaviour: {loiter_seconds: 90}

@@ -77,6 +77,18 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Phase 2: read tracks/<cam>.jsonl, write zones/<cam>.json + heatmaps/<cam>.png.",
     )
     parser.add_argument(
+        "--run-identity",
+        action="store_true",
+        help="Phase 3: run InsightFace, write identity/<cam>.json + persons/<cam>/<Pxxx>.jpg.",
+    )
+    parser.add_argument(
+        "--seed-watchlist",
+        nargs="+",
+        metavar="CAM PERSON [LABEL]",
+        default=None,
+        help="Demo helper: copy persons/<CAM>/<PERSON>.jpg into watchlist/ as LABEL.jpg.",
+    )
+    parser.add_argument(
         "--draw-zones",
         metavar="CAMERA_ID",
         default=None,
@@ -423,6 +435,113 @@ def run_zones_mode(
     return 0
 
 
+def run_identity_mode(
+    config: PipelineConfig,
+    videos_root: Path,
+    output_root: Path,
+    window: ProcessingWindow,
+) -> int:
+    from countervision.identity import run_identity, summarize_results
+
+    cameras = discover_all(config, videos_root=videos_root)
+    cameras_with_video = [c for c in cameras if c.videos]
+    if not cameras_with_video:
+        print("ERROR: no videos found under videos/.", file=sys.stderr)
+        return 2
+    # Confirm Phase 1 artefacts exist for every camera; without them we can't
+    # link faces to tracker IDs or recompute per-person dwell.
+    missing = [
+        c.config.camera_id
+        for c in cameras_with_video
+        if not (output_root / "tracks" / f"{c.config.camera_id}.jsonl").exists()
+    ]
+    if missing:
+        print(
+            f"ERROR: missing Phase-1 tracks JSONL for: {', '.join(missing)}. "
+            "Run --run-detect-track first.",
+            file=sys.stderr,
+        )
+        return 2
+
+    results = run_identity(
+        config=config,
+        cameras=cameras_with_video,
+        window=window,
+        out_root=output_root,
+        watchlist_dir=PROJECT_ROOT / "watchlist",
+    )
+    print(summarize_results(results))
+
+    summary_path = output_root / "phase3_summary.json"
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(
+        json.dumps(
+            {
+                "store_name": config.store_name,
+                "thresholds": {
+                    "quality_min": float(config.identity.get("quality_min", 0.55)),
+                    "cosine_match": float(config.identity.get("cosine_match", 0.38)),
+                    "sample_every_n_frames": int(
+                        config.identity.get("sample_every_n_frames", 5)
+                    ),
+                },
+                "cameras": [
+                    {
+                        "camera_id": r.camera_id,
+                        "area": r.area,
+                        "faces_seen": r.faces_seen,
+                        "faces_quality_gated": r.faces_quality_gated,
+                        "unique_visitors_count": r.unique_visitors_count,
+                        "alerts_emitted": len(r.alerts),
+                        "json_path": str(r.json_path.relative_to(PROJECT_ROOT)),
+                        "elapsed_seconds": r.elapsed_seconds,
+                    }
+                    for r in results
+                ],
+                "guardrails": {
+                    "unique_visitors_locked": False,
+                    "note": (
+                        "Authoritative unique-visitor counts now come from face-based "
+                        "identity. Alert copy is non-accusatory by design — every event "
+                        "is a 'please verify' review prompt."
+                    ),
+                },
+            },
+            indent=2,
+            default=str,
+        ),
+        encoding="utf-8",
+    )
+    print(f"Wrote Phase 3 summary JSON: {summary_path}", file=sys.stderr)
+    return 0
+
+
+def run_seed_watchlist_mode(output_root: Path, args: list[str]) -> int:
+    from countervision.identity import seed_watchlist_from_person
+
+    if len(args) < 2:
+        print(
+            "ERROR: --seed-watchlist needs at least CAMERA_ID PERSON_ID, "
+            "optionally followed by a LABEL.",
+            file=sys.stderr,
+        )
+        return 2
+    cam, pid = args[0], args[1]
+    label = args[2] if len(args) > 2 else None
+    dst = seed_watchlist_from_person(
+        out_root=output_root,
+        watchlist_dir=PROJECT_ROOT / "watchlist",
+        camera_id=cam,
+        person_id=pid,
+        label=label,
+    )
+    print(f"Seeded watchlist entry: {dst.relative_to(PROJECT_ROOT)}")
+    print(
+        "Re-run `python main.py --run-identity` to see the watchlist alert fire."
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     log = configure_logging(args.log_level)
@@ -441,10 +560,14 @@ def main(argv: list[str] | None = None) -> int:
         return run_draw_zones_interactive_mode(args.config, args.output_root, args.draw_zones)
     if args.run_zones:
         return run_zones_mode(config, args.videos_root, args.output_root)
+    if args.run_identity:
+        return run_identity_mode(config, args.videos_root, args.output_root, window)
+    if args.seed_watchlist:
+        return run_seed_watchlist_mode(args.output_root, args.seed_watchlist)
 
     print(
-        "Nothing to do. Modes: --dry-run (Phase 0) / --run-detect-track (Phase 1) / "
-        "--draw-zones-default / --draw-zones CAM / --run-zones (Phase 2).",
+        "Nothing to do. Modes: --dry-run / --run-detect-track / --draw-zones-default / "
+        "--draw-zones CAM / --run-zones / --run-identity / --seed-watchlist CAM PID [LABEL].",
         file=sys.stderr,
     )
     return 1
