@@ -56,12 +56,40 @@ uv run python main.py --run-identity
 #    presence), not single continuous trips.
 uv run python main.py --run-cross-camera
 
-# 7. Tests + lint
+# 7. Phase 5 — aggregate everything into the dashboard contract.
+#    Reads Phase 1-4 outputs and writes analytics.json + analytics.db.
+#    Generates 3-5 plain-English insights from reliable numbers only;
+#    locks anything uncomputable (POS / weather / staffing) so the
+#    dashboard renders 'data not available' instead of a made-up number.
+uv run python main.py --run-aggregate
+
+# 8. Tests + lint
 uv run ruff check ..
 uv run pytest ../tests -q
 ```
 
 The dry-run is what CI runs on every push (`.github/workflows/ci.yml`).
+
+## Phase 5 outputs
+
+`uv run python main.py --run-aggregate` reads every Phase 1–4 output
+and writes two files (both gitignored):
+
+- `data/output/analytics.json` — the **single file the dashboard
+  reads.** Schema documented in [`docs/schema.md`](./docs/schema.md);
+  versioned (`version: 1`). Carries reliable KPIs (high/medium
+  confidence) alongside hedged KPIs (low confidence with explicit
+  `note`/`method`) and **locked KPIs** (`{"value": null,
+  "locked": true, "reason": "..."}`) for things like POS conversion
+  and weather that this footage cannot compute.
+- `data/output/analytics.db` — faithful sqlite mirror of the same
+  data (tables: `areas`, `visitors`, `alerts`, `footfall_by_hour`,
+  `occupancy_timeseries`, `cross_camera_links`, `insights`, `kpis`).
+
+**`insights[]` generation rules:** every insight ties to a reliable
+per-area number (dwell, occupancy, unique-faces). No insight is built
+on a cross-camera link or near-zero footfall — see
+`test_no_insight_built_on_cross_camera` for the asserted invariant.
 
 ## Phase 4 outputs
 

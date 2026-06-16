@@ -25,7 +25,8 @@
 | 2 | Zones / footfall / dwell / heatmap / occupancy      | ✅ done     | Pushed (HEAD `6e75615`); CI green. 43/43 tests, real-footage run validated (heatmaps overlay correctly; provisional dwell + occupancy timeseries written; `unique_visitors_locked: true` everywhere). |
 | 3 | Identity: unique + repeat + watchlist               | ✅ done     | Pushed (HEAD `4bfa653`); CI green. 59/59 tests; tuned quality_min=0.55, cosine_match=0.32. 16 unique visitors total (vs 89 raw tracker IDs); camera-5 P006 = 7 merged Phase-1 fragments → 31.6 s authoritative dwell; planted watchlist self-test fires correct alerts; `unique_visitors_locked: false`. |
 | 4 | Cross-camera identity (de-dup, not journey)         | ✅ done     | Pushed (HEAD `62662ee`); CI green. 72/72 tests; cross_camera_match=0.50 (high bar, distinct from 0.32); 3 reliable links found (sims 0.58–0.60) over a ≈4 h 13 m gap → **store-wide unique 13** (vs 16 naive). |
-| 5 | Aggregate → `analytics.json` + sqlite + insights    | ⏳ pending  | Awaits go-ahead. |
+| 5 | Aggregate → `analytics.json` + sqlite + insights    | ✅ done     | 89/89 tests; 5 reliable insights generated from per-area dwell + occupancy; cross-camera & watchlist carried through as hedged fields with `render_hint`; 4 locked KPIs documented (POS, weather, quantified staffing). |
+| 6 | Next.js dashboard (navy, client-ready)              | ⏳ pending  | Awaits go-ahead. |
 | 2 | Zones / footfall / dwell / heatmap / occupancy      | ⏳ pending  | |
 | 3 | Identity: unique + repeat + watchlist               | ⏳ pending  | |
 | 4 | Cross-camera journey                                | ⏳ pending  | |
@@ -801,3 +802,152 @@ Aggregate everything (Phase 1–4 outputs) into the §7
 retail insights tied to real numbers, and document the schema in
 `docs/schema.md`. The store-wide unique number from Phase 4 is the
 headline KPI on the dashboard.
+
+---
+
+## Phase 5 — Aggregate → analytics.json + sqlite + insights
+
+### THINK (goal, files, risks)
+
+**Goal.** Read every Phase 1–4 output and emit the single
+`analytics.json` file the dashboard consumes (plus a faithful
+sqlite mirror so downstream tools can SQL it). Generate 3–5
+plain-English retail insights — but **only** from the reliable
+numbers (per-area dwell, occupancy, area-level unique faces). Never
+build an insight on a cross-camera link or near-zero footfall.
+Document everything in `docs/schema.md`.
+
+**Three honesty buckets in code**, surfaced explicitly to the
+dashboard so it can render with the right hedging:
+
+1. **Reliable headlines** — `confidence: "high" | "medium"`. Tied to
+   Phase 3 face-based dwell, occupancy, area-level unique counts.
+2. **Hedged / low confidence** — `confidence: "low"`. Cross-camera
+   links, watchlist hits, footfall when entry lines weren't redrawn.
+   Each carries a `note` / `method` / `presence_note` saying why.
+3. **Locked** — `{"value": null, "locked": true, "reason": "..."}`.
+   Uncomputable from this footage (POS / conversion / weather /
+   quantified staffing). Dashboard must render "data not available".
+
+**Files created / changed.**
+
+* `pipeline/countervision/aggregate.py` — new. `aggregate(...)`
+  reads `tracks/`, `zones/`, `identity/`, `cross_camera.json`,
+  composes the §7 schema, writes `analytics.json` and a sqlite
+  mirror in one pass. `_generate_insights(...)` emits 3–5 insights
+  with documented trigger conditions (highest_dwell_area,
+  peak_occupancy_zone, area_engagement_imbalance,
+  repeat_visitor_opportunity, demo_headline_framing). Locked-fields
+  block emitted with explicit reasons.
+* `pipeline/main.py` — `--run-aggregate` mode.
+* `tests/test_aggregate.py` — 17 tests. Synthetic Phase 1–4 inputs
+  in a tmp dir → exercises schema basics, locked-field emission,
+  cross-camera hedging copy, no-reliable-matches fallback path,
+  watchlist confidence_note, sqlite mirror row counts, all 5
+  insight triggers and parametric footfall-confidence boundary.
+* `docs/schema.md` — plain-English schema doc + sqlite table
+  layout. Includes the honesty conventions, locked-fields rationale,
+  and the cross-camera `render_hint` (dashboard MUST hedge).
+* `.gitignore` — covers `data/output/analytics.json`,
+  `data/output/analytics.db`.
+
+**Risks / decisions taken.**
+
+* **Insights ignore the cross-camera block entirely.** A test
+  (`test_no_insight_built_on_cross_camera`) actively asserts no
+  generated insight mentions "cross-camera" or "store-wide" — the
+  cross-camera count is rendered as a hedged KPI elsewhere, not
+  spun into a recommendation.
+* **Footfall confidence flips low → medium at value ≥ 5.** Below 5
+  the small-sample noise dominates; we don't want the dashboard
+  shouting "0 footfall" as if that were a fact about the store.
+* **Per-area `unique_visitors` is authoritative** (face-based from
+  Phase 3). `person_tracks_note` on each area reminds implementors
+  that the tracker-id count is not the source of truth.
+* **sqlite is a faithful mirror, not a query layer.** All
+  derivation lives in the JSON build; sqlite just makes the same
+  data queryable for downstream tools. We `DROP + CREATE` on every
+  run so the mirror is always in sync.
+* **No `conversion_rate` fabricated from face count.** That's the
+  classic temptation — emit "conversion_rate = unique_visitors /
+  footfall × some_constant". We explicitly do not do that; the
+  KPI is locked with a clear reason. Phase 7 talk-track can quote
+  the locked status as "what we'd unlock with a 1-day POS
+  integration", which is a stronger pitch than a made-up number.
+
+### CODE
+
+Implemented exactly the files above. **89/89** tests pass; ruff clean.
+
+### VALIDATE (on real footage)
+
+```bash
+cd pipeline
+uv run python main.py --run-aggregate
+```
+
+Headline output (real Phase 1–4 artefacts, no model run, ~2 s):
+
+```
+schema version           : 1
+cameras / areas          : 3 / 3
+visitors (camera-person) : 16
+alerts                   : 9
+insights generated       : 5
+store-wide unique        : 13
+written analytics.json   : data/output/analytics.json
+written sqlite mirror    : data/output/analytics.db
+```
+
+**Reliable KPIs (`confidence: high | medium`):**
+
+| KPI                            | value | confidence | note |
+|--------------------------------|------:|------------|------|
+| `avg_dwell_seconds_store`      |  73.9 | high       | weighted across areas; uses authoritative track-dwell |
+| `store_wide_unique_visitors`   |    13 | medium     | 3 cross-camera links above the 0.50 high-precision bar; saved 3 from naive sum |
+| `repeat_visitors_per_area`     |     5 | medium     | face seen ≥ 2 visit segments within a single camera |
+
+**Hedged KPIs (`confidence: low`):**
+
+| KPI                | value | reason |
+|--------------------|------:|--------|
+| `footfall_total`   |     3 | auto-generated entry lines at 75 % height; operator should redraw for production demos |
+| `watchlist_hits`   |     4 | verification prompts, not identifications; similarity attached to each |
+
+**Locked KPIs** — emitted as `{"value": null, "locked": true, "reason": "..."}`:
+
+* `conversion_rate` — no POS data
+* `revenue_uplift` — no POS data
+* `weather` — no external feed
+* `staffing_recommendations_quantified` — needs payroll integration
+
+**Insights generated** (all from reliable numbers; none built on
+cross-camera or footfall):
+
+1. `[high]` *Longest average dwell in Customer Seating / Try-on
+   Lounge* — visitors spend an average of **96 s** there.
+2. `[high]` *Peak crowding in Cosmetics & Skincare* — peaked at 3
+   simultaneous occupants.
+3. `[medium]` *Most engagement is happening in Customer Seating /
+   Try-on Lounge* — 8 unique faces vs 2 in Cosmetics & Skincare.
+4. `[medium]` *5 repeat visitors identified within this window*.
+5. `[high]` *Areas with the deepest engagement are the staffing
+   priority* — 16 unique faces total; deepest single dwell 180 s.
+
+**sqlite mirror** populated correctly: `areas=3`, `visitors=16`,
+`alerts=9`, `footfall_by_hour=2`, `occupancy_timeseries=523`,
+`cross_camera_links=3`, `insights=5`, `kpis=12`.
+
+### PUSH
+
+(see below — appended after the push lands.)
+
+### NEXT — Phase 6 (do not start yet)
+
+Next.js 16 dashboard (App Router + React 19 + Tailwind v4 + shadcn
++ Recharts 3) reading **only** `analytics.json`. Navy `#0A1347`. The
+build step copies `data/output/*` into `dashboard/public/`. Polish
+budget goes here — KPI cards, per-area heatmap hero, footfall-by-hour,
+dwell-by-area, occupancy line, annotated video player, alerts feed
+(with hedged copy on watchlist!), insights panel, and a journey-style
+visual that respects the `render_hint` on `cross_camera`.

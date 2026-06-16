@@ -87,6 +87,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Phase 4: dedup people across cameras using identity centroids.",
     )
     parser.add_argument(
+        "--run-aggregate",
+        action="store_true",
+        help="Phase 5: read Phase 1-4 outputs and write analytics.json + analytics.db.",
+    )
+    parser.add_argument(
         "--seed-watchlist",
         nargs="+",
         metavar="CAM PERSON [LABEL]",
@@ -593,16 +598,26 @@ def main(argv: list[str] | None = None) -> int:
         return run_identity_mode(config, args.videos_root, args.output_root, window)
     if args.run_cross_camera:
         return run_cross_camera_mode(config, args.output_root)
+    if args.run_aggregate:
+        return run_aggregate_mode(config, args.output_root)
     if args.seed_watchlist:
         return run_seed_watchlist_mode(args.output_root, args.seed_watchlist)
 
     print(
         "Nothing to do. Modes: --dry-run / --run-detect-track / --draw-zones-default / "
         "--draw-zones CAM / --run-zones / --run-identity / --run-cross-camera / "
-        "--seed-watchlist CAM PID [LABEL].",
+        "--run-aggregate / --seed-watchlist CAM PID [LABEL].",
         file=sys.stderr,
     )
     return 1
+
+
+def run_aggregate_mode(config: PipelineConfig, output_root: Path) -> int:
+    from countervision.aggregate import aggregate, summarize_result
+
+    result = aggregate(output_root=output_root, store_name=config.store_name)
+    print(summarize_result(result, PROJECT_ROOT))
+    return 0
 
 
 if __name__ == "__main__":
