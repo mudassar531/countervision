@@ -25,7 +25,7 @@
 | 2 | Zones / footfall / dwell / heatmap / occupancy      | ✅ done     | Pushed (HEAD `6e75615`); CI green. 43/43 tests, real-footage run validated (heatmaps overlay correctly; provisional dwell + occupancy timeseries written; `unique_visitors_locked: true` everywhere). |
 | 3 | Identity: unique + repeat + watchlist               | ✅ done     | Pushed (HEAD `4bfa653`); CI green. 59/59 tests; tuned quality_min=0.55, cosine_match=0.32. 16 unique visitors total (vs 89 raw tracker IDs); camera-5 P006 = 7 merged Phase-1 fragments → 31.6 s authoritative dwell; planted watchlist self-test fires correct alerts; `unique_visitors_locked: false`. |
 | 4 | Cross-camera identity (de-dup, not journey)         | ✅ done     | Pushed (HEAD `62662ee`); CI green. 72/72 tests; cross_camera_match=0.50 (high bar, distinct from 0.32); 3 reliable links found (sims 0.58–0.60) over a ≈4 h 13 m gap → **store-wide unique 13** (vs 16 naive). |
-| 5 | Aggregate → `analytics.json` + sqlite + insights    | ✅ done     | 89/89 tests; 5 reliable insights generated from per-area dwell + occupancy; cross-camera & watchlist carried through as hedged fields with `render_hint`; 4 locked KPIs documented (POS, weather, quantified staffing). |
+| 5 | Aggregate → `analytics.json` + sqlite + insights    | ✅ done     | Pushed (HEAD `8bdcabd`); CI green. 89/89 tests; 5 reliable insights generated from per-area dwell + occupancy; cross-camera & watchlist carried through as hedged fields with `render_hint`; 4 locked KPIs documented (POS, weather, quantified staffing). Schema doc at `docs/schema.md`. |
 | 6 | Next.js dashboard (navy, client-ready)              | ⏳ pending  | Awaits go-ahead. |
 | 2 | Zones / footfall / dwell / heatmap / occupancy      | ⏳ pending  | |
 | 3 | Identity: unique + repeat + watchlist               | ⏳ pending  | |
@@ -940,7 +940,11 @@ cross-camera or footfall):
 
 ### PUSH
 
-(see below — appended after the push lands.)
+- Commit on `main`: `8bdcabd` — Phase 5: aggregate → analytics.json
+  + sqlite + insights
+- Repo: <https://github.com/mudassar531/countervision>
+- CI: [run 27625280733](https://github.com/mudassar531/countervision/actions/runs/27625280733)
+  green on `8bdcabd` — ruff clean, **89/89** pytest pass.
 
 ### NEXT — Phase 6 (do not start yet)
 
