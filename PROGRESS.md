@@ -23,7 +23,7 @@
 | 0 | Scaffold + camera discovery + timeparse + CI        | ✅ done     | Pushed to `mudassar531/countervision` (HEAD `ff0897f`). CI green, 20/20 tests pass, dry-run validated on real footage locally. |
 | 1 | Detect + track (YOLO26 MPS + BoT-SORT)              | ✅ done     | Pushed (HEAD `327913e`); CI green. 27/27 tests, 3 cameras × 180 s validated on real footage — 89 unique IDs, 38 ID-switch-proxy events, ID #28 survived a 2.20 s occlusion. |
 | 2 | Zones / footfall / dwell / heatmap / occupancy      | ✅ done     | Pushed (HEAD `6e75615`); CI green. 43/43 tests, real-footage run validated (heatmaps overlay correctly; provisional dwell + occupancy timeseries written; `unique_visitors_locked: true` everywhere). |
-| 3 | Identity: unique + repeat + watchlist               | ✅ done     | 59/59 tests; tuned quality_min=0.55, cosine_match=0.32. 16 unique visitors total (vs 89 raw tracker IDs); camera-5 P006 = 7 merged Phase-1 fragments; planted watchlist self-test fires correct alerts; `unique_visitors_locked: false`. |
+| 3 | Identity: unique + repeat + watchlist               | ✅ done     | Pushed (HEAD `4bfa653`); CI green. 59/59 tests; tuned quality_min=0.55, cosine_match=0.32. 16 unique visitors total (vs 89 raw tracker IDs); camera-5 P006 = 7 merged Phase-1 fragments → 31.6 s authoritative dwell; planted watchlist self-test fires correct alerts; `unique_visitors_locked: false`. |
 | 4 | Cross-camera journey                                | ⏳ pending  | Awaits go-ahead. |
 | 2 | Zones / footfall / dwell / heatmap / occupancy      | ⏳ pending  | |
 | 3 | Identity: unique + repeat + watchlist               | ⏳ pending  | |
@@ -639,7 +639,12 @@ results, no JSON written) — face processing is fully toggleable.
 
 ### PUSH
 
-(see below — appended after the push lands.)
+- Commit on `main`: `4bfa653` — Phase 3: InsightFace identity (unique +
+  repeat + watchlist)
+- Repo: <https://github.com/mudassar531/countervision>
+- CI: [run 27586753724](https://github.com/mudassar531/countervision/actions/runs/27586753724)
+  green on `4bfa653` — ruff clean, **59/59** pytest pass on the
+  default-only deps (no `[cv]` / `[identity]` extras needed in CI).
 
 ### NEXT — Phase 4 (do not start yet)
 
