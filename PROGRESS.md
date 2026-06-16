@@ -24,7 +24,7 @@
 | 1 | Detect + track (YOLO26 MPS + BoT-SORT)              | ✅ done     | Pushed (HEAD `327913e`); CI green. 27/27 tests, 3 cameras × 180 s validated on real footage — 89 unique IDs, 38 ID-switch-proxy events, ID #28 survived a 2.20 s occlusion. |
 | 2 | Zones / footfall / dwell / heatmap / occupancy      | ✅ done     | Pushed (HEAD `6e75615`); CI green. 43/43 tests, real-footage run validated (heatmaps overlay correctly; provisional dwell + occupancy timeseries written; `unique_visitors_locked: true` everywhere). |
 | 3 | Identity: unique + repeat + watchlist               | ✅ done     | Pushed (HEAD `4bfa653`); CI green. 59/59 tests; tuned quality_min=0.55, cosine_match=0.32. 16 unique visitors total (vs 89 raw tracker IDs); camera-5 P006 = 7 merged Phase-1 fragments → 31.6 s authoritative dwell; planted watchlist self-test fires correct alerts; `unique_visitors_locked: false`. |
-| 4 | Cross-camera identity (de-dup, not journey)         | ✅ done     | 72/72 tests; cross_camera_match=0.50 (high bar, distinct from 0.32); 3 reliable links found (sims 0.58–0.60) over a ≈4 h 13 m gap → **store-wide unique 13** (vs 16 naive). |
+| 4 | Cross-camera identity (de-dup, not journey)         | ✅ done     | Pushed (HEAD `62662ee`); CI green. 72/72 tests; cross_camera_match=0.50 (high bar, distinct from 0.32); 3 reliable links found (sims 0.58–0.60) over a ≈4 h 13 m gap → **store-wide unique 13** (vs 16 naive). |
 | 5 | Aggregate → `analytics.json` + sqlite + insights    | ⏳ pending  | Awaits go-ahead. |
 | 2 | Zones / footfall / dwell / heatmap / occupancy      | ⏳ pending  | |
 | 3 | Identity: unique + repeat + watchlist               | ⏳ pending  | |
@@ -654,3 +654,150 @@ Cross-camera journey. Match face embeddings across `camera-1 / camera-3
 later at `Service & Consultation Desk` is emitted as a single
 visitor with a `journey: [{camera_id, t, area}, ...]`. Phase 5 will
 roll the cross-camera unique count into the store-wide total.
+
+---
+
+## Phase 4 — Cross-camera identity (de-dup, not journey)
+
+### THINK (goal, files, risks)
+
+**Goal.** Read every `identity/<camera>.json` from Phase 3 and de-dup
+people across cameras using ArcFace centroids, with a separate
+**high-precision** cosine threshold distinct from the in-camera
+clustering cutoff. Headline metric is the **store-wide unique-visitor
+count**, not individual journeys. Each cross-camera link carries the
+similarity score; we never force a link below the high bar.
+
+**Honest framing for these specific videos.** The recording times
+**do not overlap**:
+
+* `camera-1`: 2026-06-07 20:53 (20 min)
+* `camera-3`: 2026-06-08 00:31 + 00:54 (continuation files)
+* `camera-5`: 2026-06-08 04:44 (15 min)
+
+So even a high-confidence cross-camera face match is **"same face seen
+in these areas across the captured period"** — repeat presence, *not*
+a single continuous trip. Each emitted link carries an explicit
+`presence_note` saying that, plus the computed time gap.
+
+**Files created / changed.**
+
+* `pipeline/countervision/cross_camera.py` — new. Pure-numpy
+  `UnionFind`, `_CamPerson` reader (loads `identity/<cam>.json`,
+  drops persons below `min_face_appearances` from the matching pool
+  but keeps them in the headline), `find_cross_camera_links` (skips
+  same-camera pairs; sorts links by descending similarity),
+  `build_store_wide_persons` (connected components → `S001..`
+  numbered by earliest `first_seen`), `run_cross_camera` driver +
+  `summarize_results` for the CLI.
+* `pipeline/countervision/identity.py` — small extension: each
+  person record now carries `embedding_centroid` (512 floats,
+  L2-normalized) so Phase 4 doesn't have to re-run InsightFace.
+* `pipeline/main.py` — `--run-cross-camera` mode. Reads identity
+  JSONs, writes `data/output/cross_camera.json`.
+* `pipeline/config.yaml` — new identity keys:
+  `cross_camera_match: 0.50` (deliberately ≫ 0.32) and
+  `min_face_appearances_for_cross_camera: 3`.
+* `tests/test_cross_camera.py` — 13 tests: union-find singletons /
+  union / transitive; load_identity_persons appearance gate +
+  centroid-missing skip; find_cross_camera_links no-match /
+  one-match / same-camera-pair-ignored; build_store_wide_persons
+  no-links / transitive across 3 cams; run_cross_camera no-reliable
+  path / dedup / low-appearance persons still count. **72/72**
+  total tests pass.
+
+**Risks / decisions taken.**
+
+* **Two distinct thresholds.** `cosine_match=0.32` (clustering, loose
+  recall) vs `cross_camera_match=0.50` (cross-camera, high precision).
+  False merges across cameras hurt the demo headline far more than
+  missing a real match — a "store-wide unique 13" we under-claim is
+  more defensible than "12" with a hallucinated link.
+* **`min_face_appearances_for_cross_camera=3`.** A centroid built from
+  1–2 face crops is too noisy for high-precision matching across
+  cameras; we'd see false merges. Skipped persons are listed in
+  `persons_skipped[]` in the JSON for full honesty, AND they each
+  count as their own visitor in the headline so we never disappear
+  them from the totals.
+* **No "journey" framing for these clips.** With multi-hour gaps
+  between camera windows, calling something a "journey" would
+  mislead the client. Each link's `presence_note` says "repeat
+  presence, not a single continuous trip" with the explicit
+  computed gap.
+* **No-reliable-matches honesty path.** When zero pairs clear the
+  threshold the JSON's `headline.no_reliable_cross_camera_matches:
+  true` flag fires and `store_wide_unique_visitors` falls back to
+  the naive per-camera sum. The CLI prints a ⚠ warning. We never
+  fabricate a link to fill the panel.
+
+### CODE
+
+Implemented exactly the files above. **72/72** tests pass; ruff clean.
+
+### VALIDATE (on real footage)
+
+```bash
+cd pipeline
+uv run python main.py --run-identity        # refresh JSONs with embedding_centroid
+uv run python main.py --run-cross-camera
+```
+
+Headline (real-footage run with tuned thresholds):
+
+| metric                              | value |
+|-------------------------------------|------:|
+| `cross_camera_match` threshold      |  0.50 |
+| persons in matching pool            |    14 |
+| persons skipped (face_appearances<3)|     2 |
+| per-camera unique sum (naive)       |    16 |
+| cross-camera links above threshold  |     3 |
+| **store_wide_unique_visitors**      | **13** |
+| saved by dedup                      |     3 |
+| `no_reliable_cross_camera_matches`  | false |
+
+**Reliable links found (highest similarity first):**
+
+| from                | to                  | similarity | gap          |
+|---------------------|---------------------|-----------:|--------------|
+| camera-3 / P003     | camera-5 / P004     |       0.60 | ≈ 4 h 13 m   |
+| camera-3 / P007     | camera-5 / P003     |       0.59 | ≈ 4 h 14 m   |
+| camera-3 / P003     | camera-5 / P001     |       0.58 | ≈ 4 h 10 m   |
+
+The three pairs are connected transitively (camera-3/P003 anchors a
+chain to camera-5/P001 + P004, and camera-3/P007 anchors another to
+camera-5/P003), so the union-find collapses **3 cross-camera links →
+3 saved in the store-wide count** (16 − 3 = 13). The
+`presence_note` on each link reads e.g.
+
+> *Same face appears in 'Customer Seating / Try-on Lounge'
+> (camera-3, last seen 2026-06-08T00:34:11.799) and in 'Service &
+> Consultation Desk' (camera-5, first seen 2026-06-08T04:47:19.975).
+> Recording windows do not overlap (gap ≈ 4 h 13 m), so this
+> represents the same person being seen in these areas across the
+> captured period — repeat presence, not a single continuous trip.
+> Cosine similarity 0.60.*
+
+**Persons skipped from the matching pool** (centroid too noisy):
+
+* `camera-1/P001` and `camera-1/P002` — only 1 face appearance each
+  (camera-1 detected just 3 faces total over the 180 s window because
+  the operators look down at desks). They still count as 2 visitors
+  in the headline; we just don't try to match them across cameras.
+
+### PUSH
+
+- Commit on `main`: `62662ee` — Phase 4: cross-camera identity
+  (de-dup, not journey)
+- Repo: <https://github.com/mudassar531/countervision>
+- CI: [run 27587529841](https://github.com/mudassar531/countervision/actions/runs/27587529841)
+  green on `62662ee` — ruff clean, **72/72** pytest pass on the
+  default-only deps (cross-camera module is pure-numpy, no `[cv]` /
+  `[identity]` extras needed in CI).
+
+### NEXT — Phase 5 (do not start yet)
+
+Aggregate everything (Phase 1–4 outputs) into the §7
+`analytics.json` schema + a sqlite mirror, generate 3–5 plain-English
+retail insights tied to real numbers, and document the schema in
+`docs/schema.md`. The store-wide unique number from Phase 4 is the
+headline KPI on the dashboard.
