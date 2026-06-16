@@ -1111,7 +1111,12 @@ camera-5 Per-area detail with 6 thumbnails and the "dwell 32s · faces
 
 ### PUSH
 
-(see below — appended after the push lands.)
+- Commit on `main`: `07598db` — Phase 6: Next.js 16 dashboard
+  (navy, client-ready)
+- Repo: <https://github.com/mudassar531/countervision>
+- CI: [run 27627668886](https://github.com/mudassar531/countervision/actions/runs/27627668886)
+  green on `07598db` — ruff clean, **89/89** pytest pass (unchanged;
+  dashboard has no Python tests).
 
 ### NEXT — Phase 7 (do not start yet)
 
