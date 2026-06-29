@@ -7,6 +7,7 @@ import { DwellByAreaChart, FootfallByHourChart } from "@/components/charts";
 import { AreaHeatmapHero } from "@/components/heatmap-hero";
 import { CrossCameraPanel, InsightsPanel } from "@/components/insights-and-cross";
 import { ConfidencePill, KpiCard, LockedKpiCard } from "@/components/kpi";
+import { PeoplePanel } from "@/components/people-panel";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { AnnotatedVideoPanel, type CameraVideo } from "@/components/video-panel";
@@ -195,6 +196,16 @@ export default async function Home() {
               cta="Unlock with POS integration"
             />
           </div>
+        </section>
+
+        {/* -------------------- People (core per-person story) -------------------- */}
+        <section aria-label="People in store" className="space-y-4">
+          <SectionTitle
+            eyebrow="The core story"
+            title="Who came in — and how long they stayed"
+            description="Each face the pipeline identified, with its authoritative time on camera, the area it was seen in, repeat-visit count and watchlist review status. Sortable; longest time on camera first."
+          />
+          <PeoplePanel visitors={a.visitors} crossCamera={a.cross_camera} />
         </section>
 
         {/* -------------------- 3. Per-area heatmap (hero) -------------------- */}

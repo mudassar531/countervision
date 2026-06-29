@@ -1251,6 +1251,61 @@ client-ready.
 
 ---
 
+## Post-ship enhancement — dedicated "People" panel (2026-06-29)
+
+**Scope.** Dashboard-only; no pipeline / model / production work. The
+per-person face analytics were already computed in `analytics.json`
+(`visitors[]`) — this surfaces them better, recomputing nothing.
+
+**Goal.** Consolidate the per-person story (the demo's core) into one
+prominent panel. For every detected face: thumbnail, person id,
+authoritative time-on-camera (`track_dwell_seconds`, the
+fragment-merged value), area/camera seen in, visit/repeat count, a
+repeat + a non-accusatory watchlist-review badge, and an
+identity-evidence pill consistent with the existing confidence-pill
+system. Sortable; default = longest time-on-camera first.
+
+**Files.**
+
+* `dashboard/src/components/people-panel.tsx` — new. `"use client"`
+  sortable table (shadcn `Table` + `Badge`, navy theme, reuses
+  `ConfidencePill`). Headline summary strip (people identified ·
+  store-wide-after-dedup · longest on camera · repeats · watchlist
+  reviews). Click-to-sort on time / visits / evidence; default
+  dwell-desc. Cross-camera **de-prioritised** to a single subtle,
+  hedged "↔ also matched in N area(s)" chip (no journey framing) —
+  honest because the footage is not time-synced.
+* `dashboard/src/app/page.tsx` — inserts the panel as a new
+  "The core story" section immediately after the KPI cards and before
+  the heatmap hero. All 10 existing panels untouched.
+* `dashboard/src/components/kpi.tsx` — `ConfidencePill` gained an
+  optional `label` prop (backward-compatible; same colour/shape).
+
+**Honesty decisions.**
+
+* **Identity-evidence pill, not "confidence".** The pill is derived
+  from `face_appearances` (strong ≥ 50, moderate ≥ 10, else limited),
+  so it is labelled *Identity evidence* and worded "Strong/Moderate/
+  Limited evidence" — never the generic "confidence" — so a green pill
+  next to a watchlist-review badge can't be misread as endorsing the
+  flag or the dwell value. (Caught by an adversarial review pass.)
+* **0-dwell records render "—", not "0s".** Seven faces were detected
+  but never linked to a sustained body track, so no merged dwell
+  exists; showing "0s" would misread as "no time in store". Each "—"
+  carries a hover explanation and the face count still shows.
+* **Watchlist = verification prompt**, not an identification (badge +
+  similarity in the tooltip, matching the schema's framing).
+
+**Validate.** `npm run build` (static export, TypeScript clean) +
+`eslint` clean; `make demo-quick` runs end-to-end (aggregate → build →
+serve, HTTP 200) with the panel in the static export; all 16 face
+records render; Playwright screenshots reviewed (caught + fixed a
+"2:60"→"3:00" seconds-carry bug and "1 faces"→"1 face"). A 3-dimension
+adversarial review (correctness · honesty · theme/a11y) confirmed 2
+findings (both applied), no blockers, no fabrication.
+
+---
+
 ## Next horizon — PRODUCTION (deferred; awareness only)
 
 After the client meeting the planned next horizon is **live CCTV in

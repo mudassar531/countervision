@@ -22,9 +22,12 @@ const LABEL: Record<ConfidenceLevel, string> = {
 export function ConfidencePill({
   level,
   className,
+  label,
 }: {
   level: ConfidenceLevel;
   className?: string;
+  /** Override the default tier label while keeping the tier's colour/shape. */
+  label?: string;
 }) {
   return (
     <span
@@ -35,7 +38,7 @@ export function ConfidencePill({
       )}
     >
       <span className="size-1.5 rounded-full bg-current opacity-80" />
-      {LABEL[level]}
+      {label ?? LABEL[level]}
     </span>
   );
 }
